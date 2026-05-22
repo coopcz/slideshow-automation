@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+*.db
+*.db-shm
+*.db-wal
+data/uploads/*
+data/exports/*
+!data/uploads/.gitkeep
+!data/exports/.gitkeep
+server/renderer/fonts/*.ttf
+server/renderer/fonts/*.otf
