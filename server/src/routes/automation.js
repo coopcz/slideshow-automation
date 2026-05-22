@@ -93,9 +93,9 @@ function imagePromptBlock(images) {
 async function callLlm(prompt, images = []) {
   const schemaPrompt = `Create a TikTok-native vertical slideshow for a scripture study app called Latter Study.
 
-The slideshow should feel thoughtful, faithful, and useful for individuals and families. Use more substantive slide copy than a meme caption: each slide should usually have 2 text items, one short headline and one supporting sentence. Keep each text item readable on a phone, about 8 to 18 words. If the prompt asks about controversy or sensitive religious topics, frame claims carefully, avoid attacking other faiths, and focus on learning, context, scripture, and sincere discipleship.
+The slideshow should feel thoughtful, faithful, and useful for individuals and families. Use more substantive slide copy than a meme caption. Each slide should have exactly one text item, but that text can contain two short lines separated by a newline: a hook/headline and a supporting sentence. Keep the full caption readable on a phone, about 14 to 28 words total. If the prompt asks about controversy or sensitive religious topics, frame claims carefully, avoid attacking other faiths, and focus on learning, context, scripture, and sincere discipleship.
 
-Use TikTokSans-Regular unless another font is explicitly requested. Prefer outline or black_50_background for legible native captions. Include a final slide that naturally mentions Latter Study as an AI-assisted scripture study app for consistent personal and family study.
+Use TikTokSans-Regular, outline, center alignment, center position, and 80% width for every text item. Do not use background text styles. Include a final slide that naturally mentions Latter Study as an AI-assisted scripture study app for consistent personal and family study.
 
 ${imagePromptBlock(images)}
 
@@ -135,6 +135,24 @@ function applyImages(slides, images) {
   });
 }
 
+function nativeCaptionItems(items = []) {
+  const text = items
+    .map((item) => String(item.text || '').trim())
+    .filter(Boolean)
+    .join('\n');
+
+  return [createTextItem({
+    order: 0,
+    text,
+    font: 'TikTokSans-Regular',
+    font_size: text.length > 130 ? 'medium' : 'large',
+    text_style: 'outline',
+    text_position: 'center',
+    text_alignment: 'center',
+    text_width: '80%'
+  })];
+}
+
 automationRouter.get('/capabilities', (_req, res) => {
   res.json({ llm_enabled: Boolean(config.llm.openaiKey || config.llm.anthropicKey) });
 });
@@ -154,12 +172,7 @@ automationRouter.post('/generate', async (req, res) => {
       order: index,
       image_url: slide.image_url,
       image_urls: slide.image_urls,
-      text_items: (slide.text_items || []).map((item, itemIndex) => createTextItem({
-        ...item,
-        order: itemIndex,
-        text_alignment: item.text_alignment || 'center',
-        text_width: item.text_width || '80%'
-      }))
+      text_items: nativeCaptionItems(slide.text_items)
     }))
   });
   res.json({ ...slideshow, llm_used: true });
@@ -195,7 +208,7 @@ automationRouter.post('/batch', async (req, res) => {
         order: index,
         image_url: slide.image_url,
         image_urls: slide.image_urls,
-        text_items: (slide.text_items || []).map((item, itemIndex) => createTextItem({ ...item, order: itemIndex }))
+        text_items: nativeCaptionItems(slide.text_items)
       }))
     }) : fallbackGenerated(prompt);
     if (!plan) generated.slides = applyImages(generated.slides, images);

@@ -1,4 +1,4 @@
-import { Image, LayoutGrid, Plus, Save, Settings, Sparkles } from 'lucide-react';
+import { Image, LayoutGrid, Loader2, Plus, Save, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import ExportPanel from './ExportPanel.jsx';
@@ -49,6 +49,7 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   const [prompt, setPrompt] = useState('');
   const [batchPrompts, setBatchPrompts] = useState('');
   const [automationStatus, setAutomationStatus] = useState('');
+  const [automationBusy, setAutomationBusy] = useState(null);
   const [capabilities, setCapabilities] = useState({ llm_enabled: false });
   const selected = slideshow.slides.find((slide) => slide.id === selectedId) || slideshow.slides[0];
 
@@ -69,7 +70,8 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   }
 
   async function generateFromPrompt() {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || automationBusy) return;
+    setAutomationBusy('generate');
     setAutomationStatus('Writing slides and matching local images...');
     try {
       const generated = await api('/api/automation/generate', { method: 'POST', body: JSON.stringify({ prompt }) });
@@ -78,6 +80,8 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
       setAutomationStatus(generated.llm_used ? 'Generated with OpenAI and matched against your image library.' : 'Generated with local fallback and basic image matching.');
     } catch (error) {
       setAutomationStatus(error.message);
+    } finally {
+      setAutomationBusy(null);
     }
   }
 
@@ -89,6 +93,8 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   }
 
   async function runBatch() {
+    if (!batchPrompts.trim() || automationBusy) return;
+    setAutomationBusy('batch');
     setAutomationStatus('Queueing one rendered slideshow per prompt...');
     try {
       const queued = await api('/api/automation/batch', {
@@ -99,6 +105,8 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
       setAutomationStatus(`Queued ${queued.length} slideshow render${queued.length === 1 ? '' : 's'}. Check My Exports for downloads.`);
     } catch (error) {
       setAutomationStatus(error.message);
+    } finally {
+      setAutomationBusy(null);
     }
   }
 
@@ -190,7 +198,7 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
             <div>
               <h2 className="text-sm font-bold uppercase">Automation</h2>
               <p className="mt-1 text-xs leading-5 text-ink/60">
-                Generate edits the current slideshow. It writes fuller TikTok-style slide copy, then chooses relevant images from your uploaded library.
+                Generate edits the current slideshow. It writes one native-style caption block per slide, then chooses relevant images from your uploaded library.
               </p>
             </div>
             <button className="border border-line py-2 text-sm font-bold" onClick={saveTemplate}>Save current layout as template</button>
@@ -205,7 +213,10 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
                     onChange={(event) => setPrompt(event.target.value)}
                   />
                 </label>
-                <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold" disabled={!prompt.trim()} onClick={generateFromPrompt}><Sparkles size={15} /> Generate editable slideshow</button>
+                <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold disabled:cursor-wait disabled:opacity-60" disabled={!prompt.trim() || Boolean(automationBusy)} onClick={generateFromPrompt}>
+                  {automationBusy === 'generate' ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}
+                  {automationBusy === 'generate' ? 'Generating slideshow...' : 'Generate editable slideshow'}
+                </button>
               </>
             )}
             {!capabilities.llm_enabled && (
@@ -222,7 +233,10 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
                 onChange={(event) => setBatchPrompts(event.target.value)}
               />
             </label>
-            <button className="border border-line py-2 text-sm font-bold" disabled={!batchPrompts.trim()} onClick={runBatch}>Queue batch renders</button>
+            <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold disabled:cursor-wait disabled:opacity-60" disabled={!batchPrompts.trim() || Boolean(automationBusy)} onClick={runBatch}>
+              {automationBusy === 'batch' && <Loader2 className="animate-spin" size={15} />}
+              {automationBusy === 'batch' ? 'Queueing batch...' : 'Queue batch renders'}
+            </button>
             {automationStatus && <p className="border-l-2 border-accent pl-3 text-xs leading-5 text-ink/70">{automationStatus}</p>}
           </div>
 
