@@ -25,7 +25,7 @@ export async function describeImage(image) {
 
   const client = new OpenAI({ apiKey: config.llm.openaiKey });
   const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: config.llm.openaiModel,
     max_tokens: 80,
     messages: [{
       role: 'user',

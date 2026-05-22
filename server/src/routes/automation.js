@@ -103,7 +103,7 @@ User request: ${prompt}`;
   if (config.llm.openaiKey) {
     const client = new OpenAI({ apiKey: config.llm.openaiKey });
     const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: config.llm.openaiModel,
       response_format: { type: 'json_schema', json_schema: slideshowSchema },
       messages: [{ role: 'user', content: schemaPrompt }]
     });

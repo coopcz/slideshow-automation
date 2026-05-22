@@ -19,6 +19,7 @@ export const config = {
   exportTtlDays: Number(process.env.EXPORT_TTL_DAYS || 7),
   llm: {
     openaiKey: process.env.OPENAI_API_KEY || '',
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-5.5',
     anthropicKey: process.env.ANTHROPIC_API_KEY || ''
   }
 };
