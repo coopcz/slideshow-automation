@@ -22,7 +22,7 @@ export default function App() {
     <SlideComposer
       slideshow={current}
       onChange={setCurrent}
-      onSave={() => save(current)}
+      onSave={(next) => save(next || current)}
       onBack={() => setCurrent({ ...current, mode: 'dashboard' })}
     />
   );

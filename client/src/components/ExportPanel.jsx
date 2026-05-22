@@ -1,4 +1,4 @@
-import { Download, Play, Trash2 } from 'lucide-react';
+import { Download, FileArchive, Film, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useRenderJob } from '../hooks/useRenderJob.js';
@@ -16,17 +16,33 @@ export default function ExportPanel({ slideshow, onSave }) {
     refresh();
   }, [job?.status]);
 
-  async function render() {
-    const saved = await onSave();
+  async function render(exportAsVideo) {
+    const next = {
+      ...slideshow,
+      settings: {
+        ...slideshow.settings,
+        export_as_video: exportAsVideo
+      }
+    };
+    const saved = await api(`/api/slideshows/${slideshow.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(next)
+    });
+    await onSave(saved);
     const result = await api(`/api/slideshows/${saved.id}/render`, { method: 'POST' });
     setJobId(result.job_id);
   }
 
   return (
     <div className="border-t border-line p-4">
-      <button className="flex w-full items-center justify-center gap-2 bg-accent px-3 py-3 text-sm font-bold text-white" onClick={render}>
-        <Play size={16} /> Render Export
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button className="flex w-full items-center justify-center gap-2 bg-accent px-3 py-3 text-sm font-bold text-white" onClick={() => render(false)}>
+          <FileArchive size={16} /> Render PNG ZIP
+        </button>
+        <button className="flex w-full items-center justify-center gap-2 border border-line bg-white px-3 py-3 text-sm font-bold" onClick={() => render(true)}>
+          <Film size={16} /> Render MP4
+        </button>
+      </div>
       {job && (
         <div className="mt-3 text-xs">
           <div className="mb-1 flex justify-between"><span>{job.message}</span><span>{job.progress}%</span></div>

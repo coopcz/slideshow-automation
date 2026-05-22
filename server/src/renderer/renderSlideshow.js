@@ -15,14 +15,26 @@ function ensureCleanDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function zipDirectory(files, outputPath) {
+function safeFolderName(title, id) {
+  const slug = String(title || 'slideshow')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return slug || id;
+}
+
+function zipDirectory(files, outputPath, folderName) {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outputPath);
     const archive = archiver('zip', { zlib: { level: 9 } });
     output.on('close', () => resolve(outputPath));
     archive.on('error', reject);
     archive.pipe(output);
-    files.forEach((file, index) => archive.file(file, { name: `slide_${String(index + 1).padStart(2, '0')}.png` }));
+    files.forEach((file, index) => {
+      archive.file(file, { name: `${folderName}/slide_${String(index + 1).padStart(2, '0')}.png` });
+    });
     archive.finalize();
   });
 }
@@ -52,6 +64,6 @@ export async function renderSlideshow({ slideshow, onProgress = () => {} }) {
 
   onProgress({ progress: 86, message: 'Creating image ZIP...' });
   const outputPath = path.join(outDir, `${slideshow.id}.zip`);
-  await zipDirectory(frames.map((frame) => frame.path), outputPath);
+  await zipDirectory(frames.map((frame) => frame.path), outputPath, safeFolderName(slideshow.title, slideshow.id));
   return { outputPath, type: 'application/zip' };
 }

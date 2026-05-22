@@ -11,7 +11,7 @@ Self-hosted local web app for creating image slideshows, editing text overlays, 
 - Configure aspect ratios: `4:5`, `9:16`, `1:1`, `16:9`.
 - Persist slideshows, images, render jobs, templates, and export history in SQLite.
 - Render server-side PNGs with Sharp.
-- Export MP4 with FFmpeg or image sequence ZIPs.
+- Export MP4 with FFmpeg or a ZIP containing a folder of rendered PNG slides.
 - Optional LLM prompt generation when `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is configured.
 - Auto-cleanup of export folders older than `EXPORT_TTL_DAYS`.
 
@@ -71,7 +71,7 @@ The app falls back to system/browser fonts when these files are missing. Before 
 - `PUT /api/slideshows/:id`: save a slideshow.
 - `POST /api/slideshows/:id/render`: enqueue a render job.
 - `GET /api/jobs/:job_id/status`: poll render status.
-- `GET /api/jobs/:job_id/download`: download completed ZIP or MP4.
+- `GET /api/jobs/:job_id/download`: download completed ZIP or MP4. ZIP exports contain a named folder with `slide_01.png`, `slide_02.png`, and so on.
 - `GET /api/images`: list uploaded images.
 - `POST /api/images`: bulk upload images with form field `images`.
 - `DELETE /api/images/:id`: delete an uploaded image.
