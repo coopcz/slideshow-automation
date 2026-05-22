@@ -14,6 +14,7 @@ const fontSizeRatios = {
 };
 
 const fontFamilies = {
+  'TikTokSans-Regular': 'TikTokSans-Regular, TikTok Sans, Arial, sans-serif',
   'BebasNeue-Regular': 'Bebas Neue, Impact, sans-serif',
   'CormorantGaramond-Regular': 'Cormorant Garamond, Georgia, serif',
   'CormorantGaramond-Italic': 'Cormorant Garamond, Georgia, serif',
@@ -48,7 +49,7 @@ function fontFaceCss() {
 function estimateWidth(text, fontSize, font) {
   const narrow = /[ijlI.,'!|]/g;
   const wide = /[MW@#%&]/g;
-  const base = text.length * fontSize * (font === 'BebasNeue-Regular' || font === 'Anton' ? 0.58 : 0.52);
+  const base = text.length * fontSize * (font === 'BebasNeue-Regular' || font === 'Anton' ? 0.58 : font === 'TikTokSans-Regular' ? 0.54 : 0.52);
   return base - (text.match(narrow)?.length || 0) * fontSize * 0.22 + (text.match(wide)?.length || 0) * fontSize * 0.18;
 }
 
@@ -165,7 +166,7 @@ function renderTextSvg(slide, settings, width, height) {
     const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle';
     const textX = align === 'left' ? x + paddingX : align === 'right' ? x + boxWidth - paddingX : x + boxWidth / 2;
     const fontStyle = item.font === 'CormorantGaramond-Italic' ? 'italic' : 'normal';
-    const fontWeight = item.font === 'Inter-Bold' ? '700' : '400';
+    const fontWeight = item.font === 'Inter-Bold' || item.font === 'TikTokSans-Regular' ? '700' : '400';
     const stroke = colors.stroke ? ` stroke="${colors.stroke}" stroke-width="${Math.max(2, Math.round(fontSize * 0.08))}" paint-order="stroke"` : '';
 
     lines.forEach((line, index) => {

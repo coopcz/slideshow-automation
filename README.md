@@ -53,7 +53,9 @@ Open `http://localhost:4000`. The Docker image includes FFmpeg and serves the bu
 
 ## Fonts
 
-Server-side rendering looks for these optional files in `server/renderer/fonts/`:
+The app defaults to TikTok Sans for new text overlays and generated prompt slideshows. TikTok released TikTok Sans as a free/open-source font under the SIL Open Font License; the bundled license is at `server/renderer/fonts/TikTokSans-OFL.txt`.
+
+Server-side rendering also looks for these optional files in `server/renderer/fonts/`:
 
 - `BebasNeue-Regular.ttf`
 - `CormorantGaramond-Regular.ttf`
@@ -61,7 +63,32 @@ Server-side rendering looks for these optional files in `server/renderer/fonts/`
 - `Anton.ttf`
 - `Inter-Bold.ttf`
 
-The app falls back to system/browser fonts when these files are missing. Before redistributing font files, verify and include each font's license. The Google Fonts families referenced by the browser preview are commonly available under the SIL Open Font License, but you should keep the license files alongside bundled TTFs.
+The app falls back to system/browser fonts when optional files are missing. Before redistributing additional font files, verify and include each font's license.
+
+## Automation Setup
+
+Prompt generation is enabled when `OPENAI_API_KEY` is present in the root `.env` file:
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+Restart the dev server after editing `.env`:
+
+```bash
+npm run dev
+```
+
+How the local automation is intended to work:
+
+1. Upload a library of your own source images.
+2. Use **Generate from prompt** for one slideshow idea. The server describes your uploaded images with OpenAI when needed, then asks the model to write the slideshow and choose relevant local images for each slide.
+3. Adjust the generated slideshow in the composer.
+4. Click **Save as template** when the structure looks right. Templates preserve layout/style/slide count, but clear specific text and image choices.
+5. Use **Batch prompts, one per line** only when you want to create several separate slideshows at once. Each line becomes its own generated slideshow and render job.
+6. Download outputs from **My Exports**. Use **Render PNG ZIP** for individual image slides, or **Render MP4** for video.
+
+Image matching uses only your local image library. It does not source images from the internet.
 
 ## API
 

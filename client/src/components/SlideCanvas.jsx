@@ -57,8 +57,8 @@ export default function SlideCanvas({ slide, settings }) {
               alignSelf: item.text_alignment === 'left' ? 'flex-start' : item.text_alignment === 'right' ? 'flex-end' : 'center',
               textAlign: item.text_alignment,
               fontSize: sizeMap[item.font_size],
-              fontFamily: item.font?.startsWith('Cormorant') ? 'Cormorant Garamond' : item.font === 'Anton' ? 'Anton' : item.font === 'Inter-Bold' ? 'Inter' : 'Bebas Neue',
-              fontWeight: item.font === 'Inter-Bold' ? 800 : 400,
+              fontFamily: item.font === 'TikTokSans-Regular' ? 'TikTok Sans' : item.font?.startsWith('Cormorant') ? 'Cormorant Garamond' : item.font === 'Anton' ? 'Anton' : item.font === 'Inter-Bold' ? 'Inter' : 'Bebas Neue',
+              fontWeight: item.font === 'Inter-Bold' || item.font === 'TikTokSans-Regular' ? 800 : 400,
               fontStyle: item.font?.includes('Italic') ? 'italic' : 'normal'
             }}>
               {item.text || 'Text'}

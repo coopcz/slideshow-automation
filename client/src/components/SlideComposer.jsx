@@ -15,7 +15,7 @@ function blankText(order) {
   return {
     id: crypto.randomUUID(),
     text: 'New text',
-    font: 'BebasNeue-Regular',
+    font: 'TikTokSans-Regular',
     font_size: 'large',
     text_style: 'outline',
     text_width: '80%',
@@ -48,6 +48,7 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [batchPrompts, setBatchPrompts] = useState('');
+  const [automationStatus, setAutomationStatus] = useState('');
   const [capabilities, setCapabilities] = useState({ llm_enabled: false });
   const selected = slideshow.slides.find((slide) => slide.id === selectedId) || slideshow.slides[0];
 
@@ -69,9 +70,15 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
 
   async function generateFromPrompt() {
     if (!prompt.trim()) return;
-    const generated = await api('/api/automation/generate', { method: 'POST', body: JSON.stringify({ prompt }) });
-    onChange({ ...slideshow, title: generated.title, settings: generated.settings, slides: generated.slides });
-    setSelectedId(generated.slides[0]?.id);
+    setAutomationStatus('Writing slides and matching local images...');
+    try {
+      const generated = await api('/api/automation/generate', { method: 'POST', body: JSON.stringify({ prompt }) });
+      onChange({ ...slideshow, title: generated.title, settings: generated.settings, slides: generated.slides });
+      setSelectedId(generated.slides[0]?.id);
+      setAutomationStatus(generated.llm_used ? 'Generated with OpenAI and matched against your image library.' : 'Generated with local fallback and basic image matching.');
+    } catch (error) {
+      setAutomationStatus(error.message);
+    }
   }
 
   async function saveTemplate() {
@@ -82,12 +89,17 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   }
 
   async function runBatch() {
-    const images = await api('/api/images');
-    await api('/api/automation/batch', {
-      method: 'POST',
-      body: JSON.stringify({ prompts: batchPrompts, image_urls: images.map((image) => image.url) })
-    });
-    setBatchPrompts('');
+    setAutomationStatus('Queueing one rendered slideshow per prompt...');
+    try {
+      const queued = await api('/api/automation/batch', {
+        method: 'POST',
+        body: JSON.stringify({ prompts: batchPrompts })
+      });
+      setBatchPrompts('');
+      setAutomationStatus(`Queued ${queued.length} slideshow render${queued.length === 1 ? '' : 's'}. Check My Exports for downloads.`);
+    } catch (error) {
+      setAutomationStatus(error.message);
+    }
   }
 
   function pickImage(url) {
@@ -175,16 +187,43 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
           </div>
 
           <div className="grid gap-3 border-b border-line p-4">
-            <h2 className="text-sm font-bold uppercase">Automation</h2>
-            <button className="border border-line py-2 text-sm font-bold" onClick={saveTemplate}>Save as template</button>
+            <div>
+              <h2 className="text-sm font-bold uppercase">Automation</h2>
+              <p className="mt-1 text-xs leading-5 text-ink/60">
+                Generate edits the current slideshow. It writes fuller TikTok-style slide copy, then chooses relevant images from your uploaded library.
+              </p>
+            </div>
+            <button className="border border-line py-2 text-sm font-bold" onClick={saveTemplate}>Save current layout as template</button>
             {capabilities.llm_enabled && (
               <>
-                <textarea className="min-h-20 border border-line bg-white p-2 text-sm" placeholder="5 morning habits, listicle format, 6 slides" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
-                <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold" onClick={generateFromPrompt}><Sparkles size={15} /> Generate from prompt</button>
+                <label className="grid gap-1 text-xs font-semibold uppercase text-ink/60">
+                  Single slideshow prompt
+                  <textarea
+                    className="min-h-28 border border-line bg-white p-2 normal-case text-sm font-normal text-ink"
+                    placeholder="Create 8 slides for Latter Study about how Joseph Smith helps us approach difficult Christian beliefs with scripture, context, and faithful study."
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                  />
+                </label>
+                <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold" disabled={!prompt.trim()} onClick={generateFromPrompt}><Sparkles size={15} /> Generate editable slideshow</button>
               </>
             )}
-            <textarea className="min-h-24 border border-line bg-white p-2 text-sm" placeholder="Batch prompts, one per line" value={batchPrompts} onChange={(event) => setBatchPrompts(event.target.value)} />
+            {!capabilities.llm_enabled && (
+              <p className="border border-line bg-white/60 p-3 text-xs leading-5 text-ink/65">
+                Add OPENAI_API_KEY to your root .env and restart the dev server to enable AI writing and image matching.
+              </p>
+            )}
+            <label className="grid gap-1 text-xs font-semibold uppercase text-ink/60">
+              Batch prompts
+              <textarea
+                className="min-h-24 border border-line bg-white p-2 normal-case text-sm font-normal text-ink"
+                placeholder={'Use this only when you want multiple finished exports. One line = one separate slideshow render.\nExample:\n5 family scripture study habits for Latter Study\nWhy context matters in difficult Bible passages'}
+                value={batchPrompts}
+                onChange={(event) => setBatchPrompts(event.target.value)}
+              />
+            </label>
             <button className="border border-line py-2 text-sm font-bold" disabled={!batchPrompts.trim()} onClick={runBatch}>Queue batch renders</button>
+            {automationStatus && <p className="border-l-2 border-accent pl-3 text-xs leading-5 text-ink/70">{automationStatus}</p>}
           </div>
 
           <ExportPanel slideshow={slideshow} onSave={onSave} />

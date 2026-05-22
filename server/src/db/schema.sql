@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS images (
   mime_type TEXT NOT NULL,
   size INTEGER NOT NULL,
   url TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 

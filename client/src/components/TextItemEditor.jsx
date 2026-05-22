@@ -1,6 +1,6 @@
 import { GripVertical, Trash2 } from 'lucide-react';
 
-const fonts = ['BebasNeue-Regular', 'CormorantGaramond-Regular', 'CormorantGaramond-Italic', 'Anton', 'Inter-Bold'];
+const fonts = ['TikTokSans-Regular', 'BebasNeue-Regular', 'CormorantGaramond-Regular', 'CormorantGaramond-Italic', 'Anton', 'Inter-Bold'];
 const sizes = ['extra_small', 'small', 'medium', 'large', 'extra_large', 'extra_extra_large'];
 const styles = ['outline', 'whiteText', 'blackText', 'yellowText', 'white_background', 'black_background', 'white_50_background', 'black_50_background'];
 const widths = ['50%', '80%', '100%'];

@@ -2,9 +2,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
 const rootDir = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+dotenv.config({ path: path.join(rootDir, '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env'), override: false });
+
 const dataDir = path.resolve(rootDir, process.env.DATA_DIR || 'data');
 
 export const config = {

@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { createSlide, createTextItem, defaultSettings, normalizeSlideshow } from '../model/defaults.js';
 import { enqueueRender } from '../queue/renderQueue.js';
 import { reloadSchedules } from '../scheduler.js';
+import { ensureImageDescriptions, selectBestImage } from '../ai/imageLibrary.js';
 
 export const automationRouter = express.Router();
 
@@ -41,13 +42,69 @@ function fallbackGenerated(prompt) {
   });
 }
 
-async function callLlm(prompt) {
-  const schemaPrompt = `Return only JSON matching this schema: {"title":"string","slides":[{"order":0,"text_items":[{"text":"string","font_size":"extra_large","text_style":"outline","text_position":"top","font":"BebasNeue-Regular"}]}]}. User request: ${prompt}`;
+const slideshowSchema = {
+  name: 'slideshow_plan',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      title: { type: 'string' },
+      slides: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            order: { type: 'integer' },
+            image_id: { type: 'string' },
+            image_hint: { type: 'string' },
+            text_items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  text: { type: 'string' },
+                  font_size: { type: 'string', enum: ['extra_small', 'small', 'medium', 'large', 'extra_large', 'extra_extra_large'] },
+                  text_style: { type: 'string', enum: ['outline', 'whiteText', 'blackText', 'yellowText', 'white_background', 'black_background', 'white_50_background', 'black_50_background'] },
+                  text_position: { type: 'string', enum: ['top', 'center', 'bottom'] },
+                  text_alignment: { type: 'string', enum: ['left', 'center', 'right'] },
+                  text_width: { type: 'string', enum: ['50%', '80%', '100%'] },
+                  font: { type: 'string', enum: ['TikTokSans-Regular', 'BebasNeue-Regular', 'CormorantGaramond-Regular', 'CormorantGaramond-Italic', 'Anton', 'Inter-Bold'] }
+                },
+                required: ['text', 'font_size', 'text_style', 'text_position', 'text_alignment', 'text_width', 'font']
+              }
+            }
+          },
+          required: ['order', 'image_id', 'image_hint', 'text_items']
+        }
+      }
+    },
+    required: ['title', 'slides']
+  }
+};
+
+function imagePromptBlock(images) {
+  if (!images.length) return 'No local images are available. Return image_id as an empty string.';
+  return `Choose one image_id per slide from this local image library. Reuse only if necessary:\n${images.map((image) => `- ${image.id}: ${image.original_name}${image.description ? ` — ${image.description}` : ''}`).join('\n')}`;
+}
+
+async function callLlm(prompt, images = []) {
+  const schemaPrompt = `Create a TikTok-native vertical slideshow for a scripture study app called Latter Study.
+
+The slideshow should feel thoughtful, faithful, and useful for individuals and families. Use more substantive slide copy than a meme caption: each slide should usually have 2 text items, one short headline and one supporting sentence. Keep each text item readable on a phone, about 8 to 18 words. If the prompt asks about controversy or sensitive religious topics, frame claims carefully, avoid attacking other faiths, and focus on learning, context, scripture, and sincere discipleship.
+
+Use TikTokSans-Regular unless another font is explicitly requested. Prefer outline or black_50_background for legible native captions. Include a final slide that naturally mentions Latter Study as an AI-assisted scripture study app for consistent personal and family study.
+
+${imagePromptBlock(images)}
+
+User request: ${prompt}`;
   if (config.llm.openaiKey) {
     const client = new OpenAI({ apiKey: config.llm.openaiKey });
     const response = await client.chat.completions.create({
       model: 'gpt-4o-mini',
-      response_format: { type: 'json_object' },
+      response_format: { type: 'json_schema', json_schema: slideshowSchema },
       messages: [{ role: 'user', content: schemaPrompt }]
     });
     return JSON.parse(response.choices[0].message.content);
@@ -64,18 +121,39 @@ async function callLlm(prompt) {
   return null;
 }
 
+function applyImages(slides, images) {
+  const byId = new Map(images.map((image) => [image.id, image]));
+  const used = new Set();
+  return slides.map((slide) => {
+    const chosen = byId.get(slide.image_id) || selectBestImage(slide, images, used);
+    if (chosen) used.add(chosen.id);
+    return {
+      ...slide,
+      image_url: chosen?.url || '',
+      image_urls: chosen?.url ? [chosen.url] : []
+    };
+  });
+}
+
 automationRouter.get('/capabilities', (_req, res) => {
   res.json({ llm_enabled: Boolean(config.llm.openaiKey || config.llm.anthropicKey) });
 });
 
 automationRouter.post('/generate', async (req, res) => {
   const prompt = req.body.prompt || '';
-  const generated = await callLlm(prompt).catch(() => null);
-  if (!generated) return res.json({ ...fallbackGenerated(prompt), llm_used: false });
+  const images = await ensureImageDescriptions().catch(() => db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 40').all());
+  const generated = await callLlm(prompt, images).catch(() => null);
+  if (!generated) {
+    const fallback = fallbackGenerated(prompt);
+    fallback.slides = applyImages(fallback.slides, images);
+    return res.json({ ...fallback, llm_used: false });
+  }
   const slideshow = normalizeSlideshow({
     title: generated.title,
-    slides: generated.slides.map((slide, index) => createSlide({
+    slides: applyImages(generated.slides, images).map((slide, index) => createSlide({
       order: index,
+      image_url: slide.image_url,
+      image_urls: slide.image_urls,
       text_items: (slide.text_items || []).map((item, itemIndex) => createTextItem({
         ...item,
         order: itemIndex,
@@ -107,11 +185,20 @@ automationRouter.get('/templates', (_req, res) => {
 
 automationRouter.post('/batch', async (req, res) => {
   const prompts = String(req.body.prompts || '').split('\n').map((line) => line.trim()).filter(Boolean);
-  const imageUrls = req.body.image_urls || [];
+  const images = await ensureImageDescriptions().catch(() => db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 40').all());
   const created = [];
   for (const prompt of prompts) {
-    const generated = fallbackGenerated(prompt);
-    generated.slides = generated.slides.map((slide, index) => ({ ...slide, image_url: imageUrls[index % Math.max(imageUrls.length, 1)] || '' }));
+    const plan = await callLlm(prompt, images).catch(() => null);
+    const generated = plan ? normalizeSlideshow({
+      title: plan.title,
+      slides: applyImages(plan.slides, images).map((slide, index) => createSlide({
+        order: index,
+        image_url: slide.image_url,
+        image_urls: slide.image_urls,
+        text_items: (slide.text_items || []).map((item, itemIndex) => createTextItem({ ...item, order: itemIndex }))
+      }))
+    }) : fallbackGenerated(prompt);
+    if (!plan) generated.slides = applyImages(generated.slides, images);
     const id = uuid();
     const now = nowIso();
     db.prepare(`INSERT INTO slideshows (id, title, settings, slides, status, created_at, updated_at)

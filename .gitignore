@@ -10,3 +10,5 @@ data/exports/*
 !data/exports/.gitkeep
 server/renderer/fonts/*.ttf
 server/renderer/fonts/*.otf
+!server/renderer/fonts/TikTokSans-Regular.ttf
+!server/renderer/fonts/TikTokSans-OFL.txt

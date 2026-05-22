@@ -66,6 +66,10 @@ export default function ImageLibrary({ picker = false, onPick, onClose }) {
               <button className="h-full w-full" onClick={() => onPick?.(image.url)}>
                 <img src={image.url} alt={image.original_name} className="h-full w-full object-cover" />
               </button>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/65 px-2 py-1 text-[10px] leading-4 text-white opacity-0 transition group-hover:opacity-100">
+                <div className="truncate font-semibold">{image.original_name}</div>
+                <div className="max-h-8 overflow-hidden text-white/75">{image.description || 'AI description will be added when automation uses this image.'}</div>
+              </div>
               <button className="absolute right-2 top-2 hidden bg-paper p-1 group-hover:block" title="Delete image" onClick={() => remove(image.id)}>
                 <Trash2 size={15} />
               </button>

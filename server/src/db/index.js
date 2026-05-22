@@ -15,6 +15,11 @@ db.pragma('foreign_keys = ON');
 const schemaPath = path.resolve(fileURLToPath(new URL('./schema.sql', import.meta.url)));
 db.exec(fs.readFileSync(schemaPath, 'utf8'));
 
+const imageColumns = db.prepare('PRAGMA table_info(images)').all().map((column) => column.name);
+if (!imageColumns.includes('description')) {
+  db.prepare("ALTER TABLE images ADD COLUMN description TEXT NOT NULL DEFAULT ''").run();
+}
+
 export function nowIso() {
   return new Date().toISOString();
 }

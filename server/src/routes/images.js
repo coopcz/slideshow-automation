@@ -34,9 +34,9 @@ imagesRouter.post('/', upload.array('images', 50), (req, res) => {
   const rows = req.files.map((file) => {
     const id = uuid();
     const url = `/uploads/${file.filename}`;
-    db.prepare(`INSERT INTO images (id, filename, original_name, mime_type, size, url, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, file.filename, file.originalname, file.mimetype, file.size, url, now);
-    return { id, filename: file.filename, original_name: file.originalname, mime_type: file.mimetype, size: file.size, url, created_at: now };
+    db.prepare(`INSERT INTO images (id, filename, original_name, mime_type, size, url, description, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, '', ?)`).run(id, file.filename, file.originalname, file.mimetype, file.size, url, now);
+    return { id, filename: file.filename, original_name: file.originalname, mime_type: file.mimetype, size: file.size, url, description: '', created_at: now };
   });
   res.status(201).json(rows);
 });

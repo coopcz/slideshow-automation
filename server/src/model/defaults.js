@@ -22,7 +22,7 @@ export function createTextItem(overrides = {}) {
   return {
     id: uuid(),
     text: '',
-    font: 'BebasNeue-Regular',
+    font: 'TikTokSans-Regular',
     font_size: 'large',
     text_style: 'outline',
     text_width: '80%',
