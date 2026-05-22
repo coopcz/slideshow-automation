@@ -1,6 +1,7 @@
 import { Image, LayoutGrid, Loader2, Plus, Save, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import AutomationStudio from './AutomationStudio.jsx';
 import ExportPanel from './ExportPanel.jsx';
 import ImageLibrary from './ImageLibrary.jsx';
 import SlideCanvas from './SlideCanvas.jsx';
@@ -239,6 +240,14 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
             </button>
             {automationStatus && <p className="border-l-2 border-accent pl-3 text-xs leading-5 text-ink/70">{automationStatus}</p>}
           </div>
+
+          <AutomationStudio
+            onOpenSlideshow={(next) => {
+              onChange(next);
+              setSelectedId(next.slides[0]?.id);
+            }}
+            onStatus={setAutomationStatus}
+          />
 
           <ExportPanel slideshow={slideshow} onSave={onSave} />
         </aside>

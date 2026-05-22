@@ -42,6 +42,31 @@ function fallbackGenerated(prompt) {
   });
 }
 
+function defaultRecipe() {
+  return {
+    name: 'Latter Study evergreen slideshow',
+    product_name: 'Latter Study',
+    audience: 'LDS individuals and families who want consistent scripture study',
+    goal: 'Promote Latter Study as a faithful AI-assisted scripture study app while teaching useful gospel study ideas.',
+    voice: 'Faithful, thoughtful, respectful, practical, never combative.',
+    prompt_template: 'Create a slideshow about {{topic}}. Connect the lesson to consistent scripture study for individuals and families, and naturally mention Latter Study near the end.',
+    slide_count: 8,
+    export_as_video: 0,
+    transition: 'none',
+    image_strategy: 'relevant',
+    output_mode: 'editable_and_render'
+  };
+}
+
+function rowToRecipe(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    slide_count: Number(row.slide_count),
+    export_as_video: Boolean(row.export_as_video)
+  };
+}
+
 const slideshowSchema = {
   name: 'slideshow_plan',
   strict: true,
@@ -90,12 +115,17 @@ function imagePromptBlock(images) {
   return `Choose one image_id per slide from this local image library. Reuse only if necessary:\n${images.map((image) => `- ${image.id}: ${image.original_name}${image.description ? ` — ${image.description}` : ''}`).join('\n')}`;
 }
 
-async function callLlm(prompt, images = []) {
-  const schemaPrompt = `Create a TikTok-native vertical slideshow for a scripture study app called Latter Study.
+async function callLlm(prompt, images = [], recipe = defaultRecipe()) {
+  const schemaPrompt = `Create a TikTok-native vertical slideshow for a scripture study app called ${recipe.product_name || 'Latter Study'}.
 
-The slideshow should feel thoughtful, faithful, and useful for individuals and families. Use more substantive slide copy than a meme caption. Each slide should have exactly one text item, but that text can contain two short lines separated by a newline: a hook/headline and a supporting sentence. Keep the full caption readable on a phone, about 14 to 28 words total. If the prompt asks about controversy or sensitive religious topics, frame claims carefully, avoid attacking other faiths, and focus on learning, context, scripture, and sincere discipleship.
+Audience: ${recipe.audience || defaultRecipe().audience}
+Goal: ${recipe.goal || defaultRecipe().goal}
+Voice: ${recipe.voice || defaultRecipe().voice}
+Required slide count: ${recipe.slide_count || 8}
 
-Use TikTokSans-Regular, outline, center alignment, center position, and 80% width for every text item. Do not use background text styles. Include a final slide that naturally mentions Latter Study as an AI-assisted scripture study app for consistent personal and family study.
+The slideshow should feel thoughtful, faithful, and useful. Use more substantive slide copy than a meme caption. Create exactly ${recipe.slide_count || 8} slides. Each slide should have exactly one text item, but that text can contain two short lines separated by a newline: a hook/headline and a supporting sentence. Keep the full caption readable on a phone, about 14 to 28 words total. If the prompt asks about controversy or sensitive religious topics, frame claims carefully, avoid attacking other faiths, and focus on learning, context, scripture, and sincere discipleship.
+
+Use TikTokSans-Regular, outline, center alignment, center position, and 80% width for every text item. Do not use background text styles. Include a final slide that naturally mentions ${recipe.product_name || 'Latter Study'} as an AI-assisted scripture study app for consistent personal and family study.
 
 ${imagePromptBlock(images)}
 
@@ -119,6 +149,16 @@ User request: ${prompt}`;
     return JSON.parse(response.content[0].text);
   }
   return null;
+}
+
+function recipePrompt(recipe, topic = '') {
+  const base = recipe.prompt_template || defaultRecipe().prompt_template;
+  return base
+    .replaceAll('{{topic}}', topic || 'a timely scripture study topic')
+    .replaceAll('{{product_name}}', recipe.product_name || 'Latter Study')
+    .replaceAll('{{audience}}', recipe.audience || defaultRecipe().audience)
+    .replaceAll('{{goal}}', recipe.goal || defaultRecipe().goal)
+    .replaceAll('{{voice}}', recipe.voice || defaultRecipe().voice);
 }
 
 function applyImages(slides, images) {
@@ -153,21 +193,22 @@ function nativeCaptionItems(items = []) {
   })];
 }
 
-automationRouter.get('/capabilities', (_req, res) => {
-  res.json({ llm_enabled: Boolean(config.llm.openaiKey || config.llm.anthropicKey) });
-});
-
-automationRouter.post('/generate', async (req, res) => {
-  const prompt = req.body.prompt || '';
+async function generateSlideshowFromPrompt(prompt, recipe = defaultRecipe()) {
   const images = await ensureImageDescriptions().catch(() => db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 40').all());
-  const generated = await callLlm(prompt, images).catch(() => null);
+  const generated = await callLlm(prompt, images, recipe).catch(() => null);
   if (!generated) {
     const fallback = fallbackGenerated(prompt);
+    fallback.settings = { ...fallback.settings, export_as_video: Boolean(recipe.export_as_video), transition: recipe.transition || 'none' };
     fallback.slides = applyImages(fallback.slides, images);
-    return res.json({ ...fallback, llm_used: false });
+    return { slideshow: fallback, llm_used: false };
   }
   const slideshow = normalizeSlideshow({
     title: generated.title,
+    settings: {
+      ...defaultSettings,
+      export_as_video: Boolean(recipe.export_as_video),
+      transition: recipe.transition || 'none'
+    },
     slides: applyImages(generated.slides, images).map((slide, index) => createSlide({
       order: index,
       image_url: slide.image_url,
@@ -175,7 +216,34 @@ automationRouter.post('/generate', async (req, res) => {
       text_items: nativeCaptionItems(slide.text_items)
     }))
   });
-  res.json({ ...slideshow, llm_used: true });
+  return { slideshow, llm_used: true };
+}
+
+function insertSlideshow(slideshow, status = 'draft') {
+  const id = uuid();
+  const now = nowIso();
+  db.prepare(`INSERT INTO slideshows (id, title, settings, slides, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, slideshow.title, JSON.stringify(slideshow.settings), JSON.stringify(slideshow.slides), status, now, now);
+  return { id, created_at: now, updated_at: now, status, ...slideshow };
+}
+
+function enqueueSlideshowRender(slideshowId, message = 'Queued') {
+  const id = uuid();
+  const now = nowIso();
+  db.prepare(`INSERT INTO jobs (id, slideshow_id, type, status, progress, message, created_at, updated_at)
+    VALUES (?, ?, 'render', 'queued', 0, ?, ?, ?)`).run(id, slideshowId, message, now, now);
+  enqueueRender(id, slideshowId);
+  return id;
+}
+
+automationRouter.get('/capabilities', (_req, res) => {
+  res.json({ llm_enabled: Boolean(config.llm.openaiKey || config.llm.anthropicKey) });
+});
+
+automationRouter.post('/generate', async (req, res) => {
+  const prompt = req.body.prompt || '';
+  const { slideshow, llm_used: llmUsed } = await generateSlideshowFromPrompt(prompt, defaultRecipe());
+  res.json({ ...slideshow, llm_used: llmUsed });
 });
 
 automationRouter.post('/templates', (req, res) => {
@@ -196,31 +264,99 @@ automationRouter.get('/templates', (_req, res) => {
   })));
 });
 
+automationRouter.get('/recipes', (_req, res) => {
+  res.json(db.prepare('SELECT * FROM automation_recipes ORDER BY updated_at DESC').all().map(rowToRecipe));
+});
+
+automationRouter.post('/recipes', (req, res) => {
+  const defaults = defaultRecipe();
+  const id = uuid();
+  const now = nowIso();
+  const recipe = {
+    ...defaults,
+    ...req.body,
+    slide_count: Math.max(3, Math.min(Number(req.body.slide_count || defaults.slide_count), 15)),
+    export_as_video: req.body.export_as_video ? 1 : 0
+  };
+  db.prepare(`INSERT INTO automation_recipes
+    (id, name, product_name, audience, goal, voice, prompt_template, slide_count, export_as_video, transition, image_strategy, output_mode, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id,
+    recipe.name,
+    recipe.product_name,
+    recipe.audience,
+    recipe.goal,
+    recipe.voice,
+    recipe.prompt_template,
+    recipe.slide_count,
+    recipe.export_as_video,
+    recipe.transition,
+    recipe.image_strategy,
+    recipe.output_mode,
+    now,
+    now
+  );
+  res.status(201).json(rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(id)));
+});
+
+automationRouter.put('/recipes/:id', (req, res) => {
+  const existing = rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
+  if (!existing) return res.status(404).json({ error: 'Automation recipe not found' });
+  const next = {
+    ...existing,
+    ...req.body,
+    slide_count: Math.max(3, Math.min(Number(req.body.slide_count || existing.slide_count), 15)),
+    export_as_video: Boolean(req.body.export_as_video ?? existing.export_as_video)
+  };
+  const now = nowIso();
+  db.prepare(`UPDATE automation_recipes SET
+    name = ?, product_name = ?, audience = ?, goal = ?, voice = ?, prompt_template = ?,
+    slide_count = ?, export_as_video = ?, transition = ?, image_strategy = ?, output_mode = ?, updated_at = ?
+    WHERE id = ?`).run(
+    next.name,
+    next.product_name,
+    next.audience,
+    next.goal,
+    next.voice,
+    next.prompt_template,
+    next.slide_count,
+    next.export_as_video ? 1 : 0,
+    next.transition,
+    next.image_strategy,
+    next.output_mode,
+    now,
+    req.params.id
+  );
+  res.json(rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id)));
+});
+
+automationRouter.delete('/recipes/:id', (req, res) => {
+  db.prepare('DELETE FROM automation_recipes WHERE id = ?').run(req.params.id);
+  res.status(204).end();
+});
+
+automationRouter.post('/recipes/:id/run', async (req, res) => {
+  const recipe = rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Automation recipe not found' });
+  const prompt = recipePrompt(recipe, req.body.topic || req.body.prompt || '');
+  const { slideshow, llm_used: llmUsed } = await generateSlideshowFromPrompt(prompt, recipe);
+  const saved = insertSlideshow(slideshow, 'draft');
+  let jobId = null;
+  if (recipe.output_mode !== 'editable_only') {
+    jobId = enqueueSlideshowRender(saved.id, 'Queued by automation recipe');
+  }
+  db.prepare('UPDATE automation_recipes SET last_run_at = ?, updated_at = ? WHERE id = ?').run(nowIso(), nowIso(), recipe.id);
+  res.status(202).json({ slideshow: saved, job_id: jobId, llm_used: llmUsed });
+});
+
 automationRouter.post('/batch', async (req, res) => {
   const prompts = String(req.body.prompts || '').split('\n').map((line) => line.trim()).filter(Boolean);
-  const images = await ensureImageDescriptions().catch(() => db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 40').all());
   const created = [];
   for (const prompt of prompts) {
-    const plan = await callLlm(prompt, images).catch(() => null);
-    const generated = plan ? normalizeSlideshow({
-      title: plan.title,
-      slides: applyImages(plan.slides, images).map((slide, index) => createSlide({
-        order: index,
-        image_url: slide.image_url,
-        image_urls: slide.image_urls,
-        text_items: nativeCaptionItems(slide.text_items)
-      }))
-    }) : fallbackGenerated(prompt);
-    if (!plan) generated.slides = applyImages(generated.slides, images);
-    const id = uuid();
-    const now = nowIso();
-    db.prepare(`INSERT INTO slideshows (id, title, settings, slides, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'draft', ?, ?)`).run(id, generated.title, JSON.stringify(generated.settings), JSON.stringify(generated.slides), now, now);
-    const jobId = uuid();
-    db.prepare(`INSERT INTO jobs (id, slideshow_id, type, status, progress, message, created_at, updated_at)
-      VALUES (?, ?, 'render', 'queued', 0, 'Queued', ?, ?)`).run(jobId, id, now, now);
-    enqueueRender(jobId, id);
-    created.push({ slideshow_id: id, job_id: jobId, title: generated.title });
+    const { slideshow } = await generateSlideshowFromPrompt(prompt, defaultRecipe());
+    const saved = insertSlideshow(slideshow, 'draft');
+    const jobId = enqueueSlideshowRender(saved.id, 'Queued');
+    created.push({ slideshow_id: saved.id, job_id: jobId, title: saved.title });
   }
   res.status(202).json(created);
 });

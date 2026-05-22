@@ -20,6 +20,27 @@ if (!imageColumns.includes('description')) {
   db.prepare("ALTER TABLE images ADD COLUMN description TEXT NOT NULL DEFAULT ''").run();
 }
 
+const recipeTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'automation_recipes'").get();
+if (!recipeTable) {
+  db.exec(`CREATE TABLE automation_recipes (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    audience TEXT NOT NULL,
+    goal TEXT NOT NULL,
+    voice TEXT NOT NULL,
+    prompt_template TEXT NOT NULL,
+    slide_count INTEGER NOT NULL DEFAULT 8,
+    export_as_video INTEGER NOT NULL DEFAULT 0,
+    transition TEXT NOT NULL DEFAULT 'none',
+    image_strategy TEXT NOT NULL DEFAULT 'relevant',
+    output_mode TEXT NOT NULL DEFAULT 'editable_and_render',
+    last_run_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+}
+
 export function nowIso() {
   return new Date().toISOString();
 }

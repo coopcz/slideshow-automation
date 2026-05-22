@@ -92,6 +92,25 @@ How the local automation is intended to work:
 
 Image matching uses only your local image library. It does not source images from the internet.
 
+### Saved Automation Recipes
+
+Use **Automation Studio** when you want a reusable “set it up once, run it later” workflow:
+
+1. Fill in product, audience, goal, voice rules, slide count, output format, and prompt template.
+2. Click **Save recipe**.
+3. Later, choose the recipe, enter only the current topic, and click **Run saved automation**.
+4. The app generates a slideshow, matches uploaded local images, opens the result in the editor, and can queue the export automatically.
+
+Prompt templates support:
+
+- `{{topic}}`
+- `{{product_name}}`
+- `{{audience}}`
+- `{{goal}}`
+- `{{voice}}`
+
+This is the local equivalent of an automation campaign. It does not publish anywhere.
+
 ## API
 
 - `POST /api/slideshows`: create a slideshow.
