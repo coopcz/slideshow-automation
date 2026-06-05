@@ -20,6 +20,7 @@ export const config = {
   llm: {
     openaiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-5.5',
+    imageDescriptionModel: process.env.OPENAI_IMAGE_DESCRIPTION_MODEL || process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini',
     anthropicKey: process.env.ANTHROPIC_API_KEY || ''
   }
 };

@@ -50,6 +50,7 @@ Open `http://localhost:4000`. The Docker image includes FFmpeg and serves the bu
 - `EXPORT_TTL_DAYS`: Export cleanup age. Default: `7`.
 - `OPENAI_API_KEY`: Enables prompt-to-slideshow generation with OpenAI.
 - `OPENAI_MODEL`: OpenAI model used for slideshow writing and image-library matching. Default: `gpt-5.5`.
+- `OPENAI_IMAGE_DESCRIPTION_MODEL`: OpenAI vision-capable model used to describe uploaded images before matching. Default: `gpt-4o-mini`.
 - `ANTHROPIC_API_KEY`: Enables prompt-to-slideshow generation with Anthropic if OpenAI is not set.
 
 ## Fonts
@@ -73,6 +74,7 @@ Prompt generation is enabled when `OPENAI_API_KEY` is present in the root `.env`
 ```bash
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5.5
+OPENAI_IMAGE_DESCRIPTION_MODEL=gpt-4o-mini
 ```
 
 Restart the dev server after editing `.env`:

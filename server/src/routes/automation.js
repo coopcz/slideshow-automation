@@ -110,9 +110,34 @@ const slideshowSchema = {
   }
 };
 
+const imageMatchSchema = {
+  name: 'slideshow_image_matches',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      matches: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            order: { type: 'integer' },
+            image_id: { type: 'string' },
+            rationale: { type: 'string' }
+          },
+          required: ['order', 'image_id', 'rationale']
+        }
+      }
+    },
+    required: ['matches']
+  }
+};
+
 function imagePromptBlock(images) {
   if (!images.length) return 'No local images are available. Return image_id as an empty string.';
-  return `Choose one image_id per slide from this local image library. Reuse only if necessary:\n${images.map((image) => `- ${image.id}: ${image.original_name}${image.description ? ` — ${image.description}` : ''}`).join('\n')}`;
+  return 'For each slide, return image_id as an empty string. Write image_hint as a concrete visual search phrase describing the ideal image for that slide. A separate matching step will choose images from the local library after the slide text is finalized.';
 }
 
 async function callLlm(prompt, images = [], recipe = defaultRecipe()) {
@@ -151,6 +176,49 @@ User request: ${prompt}`;
   return null;
 }
 
+function imageLibraryPrompt(images) {
+  return images.map((image) => {
+    const description = String(image.description || '').slice(0, 300);
+    return `- ${image.id}: ${image.original_name}${description ? ` — ${description}` : ''}`;
+  }).join('\n');
+}
+
+function slideMatchingPrompt(slides) {
+  return slides.map((slide, index) => {
+    const text = (slide.text_items || []).map((item) => item.text).join(' ').replace(/\s+/g, ' ').trim();
+    return `Slide ${slide.order ?? index}: hint="${slide.image_hint || ''}" text="${text}"`;
+  }).join('\n');
+}
+
+async function matchImagesWithLlm(slides, images, topicContext = '') {
+  if (!config.llm.openaiKey || !images.length || !slides.length) return new Map();
+  const client = new OpenAI({ apiKey: config.llm.openaiKey });
+  const prompt = `Choose the best local image for each generated slideshow slide.
+
+Topic/request:
+${topicContext}
+
+Rules:
+- Match the visible content of the image to the specific slide text and image hint.
+- Prefer concrete story, setting, object, action, and mood matches over generic religious images.
+- Use a different image_id for each slide unless there are fewer images than slides.
+- Only choose image_id values from the local image library.
+
+Slides:
+${slideMatchingPrompt(slides)}
+
+Local image library:
+${imageLibraryPrompt(images)}`;
+
+  const response = await client.chat.completions.create({
+    model: config.llm.openaiModel,
+    response_format: { type: 'json_schema', json_schema: imageMatchSchema },
+    messages: [{ role: 'user', content: prompt }]
+  });
+  const parsed = JSON.parse(response.choices[0].message.content);
+  return new Map((parsed.matches || []).map((match) => [Number(match.order), match.image_id]));
+}
+
 function recipePrompt(recipe, topic = '') {
   const base = recipe.prompt_template || defaultRecipe().prompt_template;
   return base
@@ -161,11 +229,22 @@ function recipePrompt(recipe, topic = '') {
     .replaceAll('{{voice}}', recipe.voice || defaultRecipe().voice);
 }
 
-function applyImages(slides, images) {
+function applyImages(slides, images, topicContext = '', preferredImageIds = new Map()) {
   const byId = new Map(images.map((image) => [image.id, image]));
   const used = new Set();
-  return slides.map((slide) => {
-    const chosen = byId.get(slide.image_id) || selectBestImage(slide, images, used);
+  return slides.map((slide, index) => {
+    const preferred = byId.get(preferredImageIds.get(Number(slide.order ?? index)));
+    const requested = byId.get(slide.image_id);
+    const scoringSlide = {
+      ...slide,
+      topic_context: topicContext,
+      requested_image_context: requested
+        ? `${requested.original_name} ${requested.description || ''}`
+        : ''
+    };
+    const chosen = preferred && !used.has(preferred.id)
+      ? preferred
+      : selectBestImage(scoringSlide, images, used);
     if (chosen) used.add(chosen.id);
     return {
       ...slide,
@@ -194,14 +273,21 @@ function nativeCaptionItems(items = []) {
 }
 
 async function generateSlideshowFromPrompt(prompt, recipe = defaultRecipe()) {
-  const images = await ensureImageDescriptions().catch(() => db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 40').all());
+  const images = await ensureImageDescriptions().catch((error) => {
+    console.warn(`Image description indexing failed: ${error.message}`);
+    return db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 120').all();
+  });
   const generated = await callLlm(prompt, images, recipe).catch(() => null);
   if (!generated) {
     const fallback = fallbackGenerated(prompt);
     fallback.settings = { ...fallback.settings, export_as_video: Boolean(recipe.export_as_video), transition: recipe.transition || 'none' };
-    fallback.slides = applyImages(fallback.slides, images);
+    fallback.slides = applyImages(fallback.slides, images, prompt);
     return { slideshow: fallback, llm_used: false };
   }
+  const preferredImageIds = await matchImagesWithLlm(generated.slides, images, prompt).catch((error) => {
+    console.warn(`LLM image matching failed, falling back to local scorer: ${error.message}`);
+    return new Map();
+  });
   const slideshow = normalizeSlideshow({
     title: generated.title,
     settings: {
@@ -209,7 +295,7 @@ async function generateSlideshowFromPrompt(prompt, recipe = defaultRecipe()) {
       export_as_video: Boolean(recipe.export_as_video),
       transition: recipe.transition || 'none'
     },
-    slides: applyImages(generated.slides, images).map((slide, index) => createSlide({
+    slides: applyImages(generated.slides, images, prompt, preferredImageIds).map((slide, index) => createSlide({
       order: index,
       image_url: slide.image_url,
       image_urls: slide.image_urls,
