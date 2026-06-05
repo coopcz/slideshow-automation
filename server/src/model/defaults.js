@@ -8,7 +8,7 @@ export const aspectRatios = {
 };
 
 export const defaultSettings = {
-  aspect_ratio: '4:5',
+  aspect_ratio: '1:1',
   text_position: 'center',
   export_as_video: true,
   slide_duration: 4,

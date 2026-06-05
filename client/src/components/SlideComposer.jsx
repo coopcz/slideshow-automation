@@ -1,4 +1,4 @@
-import { Image, LayoutGrid, Loader2, Plus, Save, Settings, Sparkles } from 'lucide-react';
+import { Image, Loader2, PanelLeftClose, PanelLeftOpen, Plus, Save, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import AutomationStudio from './AutomationStudio.jsx';
@@ -9,7 +9,6 @@ import SlideList from './SlideList.jsx';
 import SlideshowSettings from './SlideshowSettings.jsx';
 import TextItemEditor from './TextItemEditor.jsx';
 
-const layouts = ['single', '1:2', '2:1', '2:2', '1:3'];
 const ratios = ['4:5', '9:16', '1:1', '16:9'];
 
 function blankText(order) {
@@ -47,8 +46,9 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   const [selectedId, setSelectedId] = useState(slideshow.slides[0]?.id);
   const [picker, setPicker] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [imageLibraryOpen, setImageLibraryOpen] = useState(true);
+  const [workspaceTab, setWorkspaceTab] = useState('edit');
   const [prompt, setPrompt] = useState('');
-  const [batchPrompts, setBatchPrompts] = useState('');
   const [automationStatus, setAutomationStatus] = useState('');
   const [automationBusy, setAutomationBusy] = useState(null);
   const [capabilities, setCapabilities] = useState({ llm_enabled: false });
@@ -93,24 +93,6 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
     });
   }
 
-  async function runBatch() {
-    if (!batchPrompts.trim() || automationBusy) return;
-    setAutomationBusy('batch');
-    setAutomationStatus('Queueing one rendered slideshow per prompt...');
-    try {
-      const queued = await api('/api/automation/batch', {
-        method: 'POST',
-        body: JSON.stringify({ prompts: batchPrompts })
-      });
-      setBatchPrompts('');
-      setAutomationStatus(`Queued ${queued.length} slideshow render${queued.length === 1 ? '' : 's'}. Check My Exports for downloads.`);
-    } catch (error) {
-      setAutomationStatus(error.message);
-    } finally {
-      setAutomationBusy(null);
-    }
-  }
-
   function pickImage(url) {
     if (picker?.type === 'newSlide') {
       const next = blankSlide(slideshow.slides.length, url);
@@ -121,7 +103,7 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
       urls[picker.index] = url;
       patchSlide({ image_urls: urls, image_url: urls[0] || selected.image_url });
     } else {
-      patchSlide({ image_url: url, image_urls: [url] });
+      patchSlide({ image_layout: 'single', image_url: url, image_urls: [url] });
     }
     setPicker(null);
   }
@@ -144,112 +126,133 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
         </div>
       </header>
 
-      <main className="grid min-h-0 grid-cols-[270px_1fr_360px]">
+      <main className={imageLibraryOpen ? 'grid min-h-0 grid-cols-[270px_1fr_360px]' : 'grid min-h-0 grid-cols-[56px_1fr_360px]'}>
         <aside className="min-h-0 border-r border-line bg-paper">
-          <ImageLibrary />
+          {imageLibraryOpen ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex items-center justify-end border-b border-line px-3 py-3">
+                <button className="flex h-9 w-9 items-center justify-center border border-line bg-white" title="Hide image library" onClick={() => setImageLibraryOpen(false)}>
+                  <PanelLeftClose size={17} />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ImageLibrary />
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-full flex-col items-center bg-paper py-3">
+              <button className="flex h-10 w-10 items-center justify-center border border-line bg-white" title="Show image library" onClick={() => setImageLibraryOpen(true)}>
+                <PanelLeftOpen size={18} />
+              </button>
+              <div className="mt-4 rotate-180 text-[11px] font-bold uppercase tracking-wide text-ink/50 [writing-mode:vertical-rl]">Image Library</div>
+            </div>
+          )}
         </aside>
         <section className="min-h-0">
           <SlideCanvas slide={selected} settings={slideshow.settings} />
         </section>
         <aside className="min-h-0 overflow-auto border-l border-line bg-paper">
-          <div className="border-b border-line p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-bold uppercase">Text Overlays</h2>
-              <button title="Add text" className="bg-ink p-2 text-white" onClick={() => patchSlide({ text_items: [...selected.text_items, blankText(selected.text_items.length)] })}><Plus size={16} /></button>
-            </div>
-            <div className="grid gap-3">
-              {[...selected.text_items].sort((a, b) => a.order - b.order).map((item, index, sorted) => (
-                <TextItemEditor
-                  key={item.id}
-                  item={item}
-                  onChange={(patch) => updateText(item.id, patch)}
-                  onDelete={() => patchSlide({ text_items: selected.text_items.filter((text) => text.id !== item.id).map((text, order) => ({ ...text, order })) })}
-                  onMoveUp={() => {
-                    if (index === 0) return;
-                    const next = [...sorted];
-                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                    patchSlide({ text_items: next.map((text, order) => ({ ...text, order })) });
-                  }}
-                  onMoveDown={() => {
-                    if (index === sorted.length - 1) return;
-                    const next = [...sorted];
-                    [next[index + 1], next[index]] = [next[index], next[index + 1]];
-                    patchSlide({ text_items: next.map((text, order) => ({ ...text, order })) });
-                  }}
-                />
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-paper/95 px-4 py-3 backdrop-blur">
+            <div className="text-xs font-bold uppercase tracking-wide text-ink/55">Workspace</div>
+            <div className="flex border border-line bg-white p-1">
+              {['edit', 'automation'].map((tab) => (
+                <button
+                  key={tab}
+                  className={`px-3 py-1.5 text-xs font-bold ${workspaceTab === tab ? 'bg-ink text-white' : 'text-ink/65'}`}
+                  onClick={() => setWorkspaceTab(tab)}
+                >
+                  {tab === 'edit' ? 'Edit' : 'Automation Studio'}
+                </button>
               ))}
             </div>
           </div>
 
-          <div className="grid gap-3 border-b border-line p-4">
-            <h2 className="text-sm font-bold uppercase">Slide Settings</h2>
-            <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold" onClick={() => setPicker({ type: 'background' })}><Image size={16} /> Change background</button>
-            <InspectorField label="Image grid layout"><select className="border border-line bg-white p-2 normal-case" value={selected.image_layout} onChange={(event) => patchSlide({ image_layout: event.target.value })}>{layouts.map((item) => <option key={item}>{item}</option>)}</select></InspectorField>
-            {selected.image_layout !== 'single' && Array.from({ length: selected.image_layout === '2:2' ? 4 : selected.image_layout === '1:3' ? 3 : 2 }).map((_, index) => (
-              <button key={index} className="flex items-center gap-2 border border-line bg-white p-2 text-sm font-semibold" onClick={() => setPicker({ type: 'slot', index })}>
-                <LayoutGrid size={15} /> Pick image {index + 1}
-              </button>
-            ))}
-            <InspectorField label="Aspect override"><select className="border border-line bg-white p-2 normal-case" value={selected.overrides.aspect_ratio || ''} onChange={(event) => patchSlide({ overrides: { ...selected.overrides, aspect_ratio: event.target.value || null } })}><option value="">Use default</option>{ratios.map((item) => <option key={item}>{item}</option>)}</select></InspectorField>
-            <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={Boolean(selected.overrides.is_bg_overlay_on ?? slideshow.settings.is_bg_overlay_on)} onChange={(event) => patchSlide({ overrides: { ...selected.overrides, is_bg_overlay_on: event.target.checked } })} /> Background overlay</label>
-            <InspectorField label="Overlay opacity"><input type="range" min="0" max="100" value={selected.overrides.background_opacity ?? slideshow.settings.background_opacity} onChange={(event) => patchSlide({ overrides: { ...selected.overrides, background_opacity: Number(event.target.value) } })} /></InspectorField>
-          </div>
+          {workspaceTab === 'edit' && (
+            <>
+              <div className="border-b border-line p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold uppercase">Text Overlays</h2>
+                  <button title="Add text" className="bg-ink p-2 text-white" onClick={() => patchSlide({ text_items: [...selected.text_items, blankText(selected.text_items.length)] })}><Plus size={16} /></button>
+                </div>
+                <div className="grid gap-3">
+                  {[...selected.text_items].sort((a, b) => a.order - b.order).map((item, index, sorted) => (
+                    <TextItemEditor
+                      key={item.id}
+                      item={item}
+                      onChange={(patch) => updateText(item.id, patch)}
+                      onDelete={() => patchSlide({ text_items: selected.text_items.filter((text) => text.id !== item.id).map((text, order) => ({ ...text, order })) })}
+                      onMoveUp={() => {
+                        if (index === 0) return;
+                        const next = [...sorted];
+                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                        patchSlide({ text_items: next.map((text, order) => ({ ...text, order })) });
+                      }}
+                      onMoveDown={() => {
+                        if (index === sorted.length - 1) return;
+                        const next = [...sorted];
+                        [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                        patchSlide({ text_items: next.map((text, order) => ({ ...text, order })) });
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
 
-          <div className="grid gap-3 border-b border-line p-4">
-            <div>
-              <h2 className="text-sm font-bold uppercase">Automation</h2>
-              <p className="mt-1 text-xs leading-5 text-ink/60">
-                Generate edits the current slideshow. It writes one native-style caption block per slide, then chooses relevant images from your uploaded library.
-              </p>
-            </div>
-            <button className="border border-line py-2 text-sm font-bold" onClick={saveTemplate}>Save current layout as template</button>
-            {capabilities.llm_enabled && (
-              <>
-                <label className="grid gap-1 text-xs font-semibold uppercase text-ink/60">
-                  Single slideshow prompt
-                  <textarea
-                    className="min-h-28 border border-line bg-white p-2 normal-case text-sm font-normal text-ink"
-                    placeholder="Create 8 slides for Latter Study about how Joseph Smith helps us approach difficult Christian beliefs with scripture, context, and faithful study."
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                  />
-                </label>
-                <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold disabled:cursor-wait disabled:opacity-60" disabled={!prompt.trim() || Boolean(automationBusy)} onClick={generateFromPrompt}>
-                  {automationBusy === 'generate' ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}
-                  {automationBusy === 'generate' ? 'Generating slideshow...' : 'Generate editable slideshow'}
-                </button>
-              </>
-            )}
-            {!capabilities.llm_enabled && (
-              <p className="border border-line bg-white/60 p-3 text-xs leading-5 text-ink/65">
-                Add OPENAI_API_KEY to your root .env and restart the dev server to enable AI writing and image matching.
-              </p>
-            )}
-            <label className="grid gap-1 text-xs font-semibold uppercase text-ink/60">
-              Batch prompts
-              <textarea
-                className="min-h-24 border border-line bg-white p-2 normal-case text-sm font-normal text-ink"
-                placeholder={'Use this only when you want multiple finished exports. One line = one separate slideshow render.\nExample:\n5 family scripture study habits for Latter Study\nWhy context matters in difficult Bible passages'}
-                value={batchPrompts}
-                onChange={(event) => setBatchPrompts(event.target.value)}
-              />
-            </label>
-            <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold disabled:cursor-wait disabled:opacity-60" disabled={!batchPrompts.trim() || Boolean(automationBusy)} onClick={runBatch}>
-              {automationBusy === 'batch' && <Loader2 className="animate-spin" size={15} />}
-              {automationBusy === 'batch' ? 'Queueing batch...' : 'Queue batch renders'}
-            </button>
-            {automationStatus && <p className="border-l-2 border-accent pl-3 text-xs leading-5 text-ink/70">{automationStatus}</p>}
-          </div>
+              <div className="grid gap-3 border-b border-line p-4">
+                <h2 className="text-sm font-bold uppercase">Slide Settings</h2>
+                <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold" onClick={() => setPicker({ type: 'background' })}><Image size={16} /> Change background</button>
+                <InspectorField label="Aspect override"><select className="border border-line bg-white p-2 normal-case" value={selected.overrides.aspect_ratio || ''} onChange={(event) => patchSlide({ overrides: { ...selected.overrides, aspect_ratio: event.target.value || null } })}><option value="">Use default</option>{ratios.map((item) => <option key={item}>{item}</option>)}</select></InspectorField>
+                <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={Boolean(selected.overrides.is_bg_overlay_on ?? slideshow.settings.is_bg_overlay_on)} onChange={(event) => patchSlide({ overrides: { ...selected.overrides, is_bg_overlay_on: event.target.checked } })} /> Background overlay</label>
+                <InspectorField label="Overlay opacity"><input type="range" min="0" max="100" value={selected.overrides.background_opacity ?? slideshow.settings.background_opacity} onChange={(event) => patchSlide({ overrides: { ...selected.overrides, background_opacity: Number(event.target.value) } })} /></InspectorField>
+              </div>
 
-          <AutomationStudio
-            onOpenSlideshow={(next) => {
-              onChange(next);
-              setSelectedId(next.slides[0]?.id);
-            }}
-            onStatus={setAutomationStatus}
-          />
+              <div className="grid gap-3 border-b border-line p-4">
+                <div>
+                  <h2 className="text-sm font-bold uppercase">Single Prompt</h2>
+                  <p className="mt-1 text-xs leading-5 text-ink/60">
+                    Generate edits the current slideshow and chooses relevant images from your uploaded library.
+                  </p>
+                </div>
+                <button className="border border-line py-2 text-sm font-bold" onClick={saveTemplate}>Save current layout as template</button>
+                {capabilities.llm_enabled && (
+                  <>
+                    <label className="grid gap-1 text-xs font-semibold uppercase text-ink/60">
+                      Slideshow prompt
+                      <textarea
+                        className="min-h-28 border border-line bg-white p-2 normal-case text-sm font-normal text-ink"
+                        placeholder="Create 8 slides for Latter Study about how Joseph Smith helps us approach difficult Christian beliefs with scripture, context, and faithful study."
+                        value={prompt}
+                        onChange={(event) => setPrompt(event.target.value)}
+                      />
+                    </label>
+                    <button className="flex items-center justify-center gap-2 border border-line py-2 text-sm font-bold disabled:cursor-wait disabled:opacity-60" disabled={!prompt.trim() || Boolean(automationBusy)} onClick={generateFromPrompt}>
+                      {automationBusy === 'generate' ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}
+                      {automationBusy === 'generate' ? 'Generating slideshow...' : 'Generate editable slideshow'}
+                    </button>
+                  </>
+                )}
+                {!capabilities.llm_enabled && (
+                  <p className="border border-line bg-white/60 p-3 text-xs leading-5 text-ink/65">
+                    Add OPENAI_API_KEY to your root .env and restart the dev server to enable AI writing and image matching.
+                  </p>
+                )}
+                {automationStatus && <p className="border-l-2 border-accent pl-3 text-xs leading-5 text-ink/70">{automationStatus}</p>}
+              </div>
 
-          <ExportPanel slideshow={slideshow} onSave={onSave} />
+              <ExportPanel slideshow={slideshow} onSave={onSave} />
+            </>
+          )}
+
+          {workspaceTab === 'automation' && (
+            <AutomationStudio
+              onOpenSlideshow={(next) => {
+                onChange(next);
+                setSelectedId(next.slides[0]?.id);
+              }}
+              onStatus={setAutomationStatus}
+            />
+          )}
+
         </aside>
       </main>
 

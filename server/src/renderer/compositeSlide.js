@@ -100,7 +100,7 @@ function layoutSlots(layout, width, height) {
 
 async function imageComposite(inputPath, slot) {
   const buffer = await sharp(inputPath)
-    .resize(Math.round(slot.width), Math.round(slot.height), { fit: 'cover', position: 'center' })
+    .resize(Math.round(slot.width), Math.round(slot.height), { fit: 'contain', position: 'center', background: '#202020' })
     .png()
     .toBuffer();
   return { input: buffer, left: Math.round(slot.left), top: Math.round(slot.top) };

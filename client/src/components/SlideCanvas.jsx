@@ -1,10 +1,3 @@
-const ratios = {
-  '4:5': '4 / 5',
-  '9:16': '4 / 5',
-  '1:1': '1 / 1',
-  '16:9': '4 / 5'
-};
-
 const sizeMap = {
   extra_small: '1.8cqh',
   small: '2.3cqh',
@@ -32,16 +25,7 @@ function gridClass(layout) {
   return 'grid-cols-1 grid-rows-1';
 }
 
-function itemFont(item) {
-  if (item.font === 'TikTokSans-Regular') return 'TikTok Sans';
-  if (item.font?.startsWith('Cormorant')) return 'Cormorant Garamond';
-  if (item.font === 'Anton') return 'Anton';
-  if (item.font === 'Inter-Bold') return 'Inter';
-  return 'Bebas Neue';
-}
-
 export default function SlideCanvas({ slide, settings }) {
-  const ratio = slide?.overrides?.aspect_ratio || settings.aspect_ratio;
   const overlayOn = slide?.overrides?.is_bg_overlay_on ?? settings.is_bg_overlay_on;
   const opacity = slide?.overrides?.background_opacity ?? settings.background_opacity;
   const position = slide?.overrides?.text_position || settings.text_position;
@@ -50,13 +34,12 @@ export default function SlideCanvas({ slide, settings }) {
   return (
     <div className="flex h-full items-center justify-center bg-[#ded8ce] px-8 py-6">
       <div
-        className="relative max-h-full w-full max-w-[620px] overflow-hidden bg-neutral-950 shadow-[0_24px_70px_rgba(0,0,0,.22)] ring-1 ring-black/10 [container-type:size]"
-        style={{ aspectRatio: ratios[ratio] || ratios['4:5'] }}
+        className="relative aspect-square max-h-full w-full max-w-[620px] overflow-hidden bg-neutral-950 shadow-[0_24px_70px_rgba(0,0,0,.22)] ring-1 ring-black/10 [container-type:size]"
       >
         <div className={`grid h-full w-full ${gridClass(slide?.image_layout)}`}>
           {(urls.length ? urls : ['']).map((url, index) => (
-            <div key={`${url}-${index}`} className="h-full w-full bg-neutral-900">
-              {url && <img src={url} alt="" className="h-full w-full object-cover object-center" />}
+            <div key={`${url}-${index}`} className="flex h-full w-full items-center justify-center bg-neutral-900">
+              {url && <img src={url} alt="" className="h-full w-full object-contain object-center" />}
             </div>
           ))}
         </div>
@@ -68,9 +51,9 @@ export default function SlideCanvas({ slide, settings }) {
               alignSelf: item.text_alignment === 'left' ? 'flex-start' : item.text_alignment === 'right' ? 'flex-end' : 'center',
               textAlign: item.text_alignment,
               fontSize: sizeMap[item.font_size],
-              fontFamily: itemFont(item),
-              fontWeight: item.font === 'Inter-Bold' || item.font === 'TikTokSans-Regular' ? 850 : 400,
-              fontStyle: item.font?.includes('Italic') ? 'italic' : 'normal'
+              fontFamily: 'TikTok Sans',
+              fontWeight: 850,
+              fontStyle: 'normal'
             }}>
               {item.text || 'Text'}
             </div>
