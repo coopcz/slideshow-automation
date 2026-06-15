@@ -8,6 +8,13 @@ import { createSlide, createTextItem, defaultSettings, normalizeSlideshow } from
 import { enqueueRender } from '../queue/renderQueue.js';
 import { reloadSchedules } from '../scheduler.js';
 import { ensureImageDescriptions, selectBestImage } from '../ai/imageLibrary.js';
+import {
+  defaultRecipe as coreDefaultRecipe,
+  generateSlideshowFromPrompt as coreGenerateSlideshowFromPrompt,
+  normalizeRecipePayload,
+  rowToRecipe as coreRowToRecipe,
+  runRecipeAutomation
+} from '../automation/core.js';
 
 export const automationRouter = express.Router();
 
@@ -328,7 +335,7 @@ automationRouter.get('/capabilities', (_req, res) => {
 
 automationRouter.post('/generate', async (req, res) => {
   const prompt = req.body.prompt || '';
-  const { slideshow, llm_used: llmUsed } = await generateSlideshowFromPrompt(prompt, defaultRecipe());
+  const { slideshow, llm_used: llmUsed } = await coreGenerateSlideshowFromPrompt(prompt, coreDefaultRecipe());
   res.json({ ...slideshow, llm_used: llmUsed });
 });
 
@@ -351,59 +358,59 @@ automationRouter.get('/templates', (_req, res) => {
 });
 
 automationRouter.get('/recipes', (_req, res) => {
-  res.json(db.prepare('SELECT * FROM automation_recipes ORDER BY updated_at DESC').all().map(rowToRecipe));
+  res.json(db.prepare('SELECT * FROM automation_recipes ORDER BY updated_at DESC').all().map(coreRowToRecipe));
 });
 
 automationRouter.post('/recipes', (req, res) => {
-  const defaults = defaultRecipe();
   const id = uuid();
   const now = nowIso();
-  const recipe = {
-    ...defaults,
-    ...req.body,
-    slide_count: Math.max(3, Math.min(Number(req.body.slide_count || defaults.slide_count), 15)),
-    export_as_video: req.body.export_as_video ? 1 : 0
-  };
+  const recipe = normalizeRecipePayload(req.body);
   db.prepare(`INSERT INTO automation_recipes
-    (id, name, product_name, audience, goal, voice, prompt_template, slide_count, export_as_video, transition, image_strategy, output_mode, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    (id, name, slideshow_type, product_name, audience, goal, voice, word_spacing, image_instructions, progression, aspect_ratio, prompt_template, slide_count, export_as_video, transition, image_strategy, output_mode, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id,
     recipe.name,
+    recipe.slideshow_type,
     recipe.product_name,
     recipe.audience,
     recipe.goal,
     recipe.voice,
+    recipe.word_spacing,
+    recipe.image_instructions,
+    recipe.progression,
+    recipe.aspect_ratio,
     recipe.prompt_template,
     recipe.slide_count,
-    recipe.export_as_video,
+    recipe.export_as_video ? 1 : 0,
     recipe.transition,
     recipe.image_strategy,
     recipe.output_mode,
     now,
     now
   );
-  res.status(201).json(rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(id)));
+  res.status(201).json(coreRowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(id)));
 });
 
 automationRouter.put('/recipes/:id', (req, res) => {
-  const existing = rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
+  const existing = coreRowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
   if (!existing) return res.status(404).json({ error: 'Automation recipe not found' });
-  const next = {
-    ...existing,
-    ...req.body,
-    slide_count: Math.max(3, Math.min(Number(req.body.slide_count || existing.slide_count), 15)),
-    export_as_video: Boolean(req.body.export_as_video ?? existing.export_as_video)
-  };
+  const next = normalizeRecipePayload(req.body, existing);
   const now = nowIso();
   db.prepare(`UPDATE automation_recipes SET
-    name = ?, product_name = ?, audience = ?, goal = ?, voice = ?, prompt_template = ?,
+    name = ?, slideshow_type = ?, product_name = ?, audience = ?, goal = ?, voice = ?,
+    word_spacing = ?, image_instructions = ?, progression = ?, aspect_ratio = ?, prompt_template = ?,
     slide_count = ?, export_as_video = ?, transition = ?, image_strategy = ?, output_mode = ?, updated_at = ?
     WHERE id = ?`).run(
     next.name,
+    next.slideshow_type,
     next.product_name,
     next.audience,
     next.goal,
     next.voice,
+    next.word_spacing,
+    next.image_instructions,
+    next.progression,
+    next.aspect_ratio,
     next.prompt_template,
     next.slide_count,
     next.export_as_video ? 1 : 0,
@@ -413,33 +420,28 @@ automationRouter.put('/recipes/:id', (req, res) => {
     now,
     req.params.id
   );
-  res.json(rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id)));
+  res.json(coreRowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id)));
 });
 
 automationRouter.delete('/recipes/:id', (req, res) => {
+  db.prepare('DELETE FROM schedules WHERE recipe_id = ?').run(req.params.id);
   db.prepare('DELETE FROM automation_recipes WHERE id = ?').run(req.params.id);
+  reloadSchedules();
   res.status(204).end();
 });
 
 automationRouter.post('/recipes/:id/run', async (req, res) => {
-  const recipe = rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
+  const recipe = coreRowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Automation recipe not found' });
-  const prompt = recipePrompt(recipe, req.body.topic || req.body.prompt || '');
-  const { slideshow, llm_used: llmUsed } = await generateSlideshowFromPrompt(prompt, recipe);
-  const saved = insertSlideshow(slideshow, 'draft');
-  let jobId = null;
-  if (recipe.output_mode !== 'editable_only') {
-    jobId = enqueueSlideshowRender(saved.id, 'Queued by automation recipe');
-  }
-  db.prepare('UPDATE automation_recipes SET last_run_at = ?, updated_at = ? WHERE id = ?').run(nowIso(), nowIso(), recipe.id);
-  res.status(202).json({ slideshow: saved, job_id: jobId, llm_used: llmUsed });
+  const result = await runRecipeAutomation(recipe, req.body.topic || req.body.prompt || '', 'Queued by automation recipe');
+  res.status(202).json(result);
 });
 
 automationRouter.post('/batch', async (req, res) => {
   const prompts = String(req.body.prompts || '').split('\n').map((line) => line.trim()).filter(Boolean);
   const created = [];
   for (const prompt of prompts) {
-    const { slideshow } = await generateSlideshowFromPrompt(prompt, defaultRecipe());
+    const { slideshow } = await coreGenerateSlideshowFromPrompt(prompt, coreDefaultRecipe());
     const saved = insertSlideshow(slideshow, 'draft');
     const jobId = enqueueSlideshowRender(saved.id, 'Queued');
     created.push({ slideshow_id: saved.id, job_id: jobId, title: saved.title });
@@ -447,12 +449,132 @@ automationRouter.post('/batch', async (req, res) => {
   res.status(202).json(created);
 });
 
-automationRouter.get('/schedules', (_req, res) => {
-  res.json(db.prepare('SELECT * FROM schedules ORDER BY updated_at DESC').all().map((row) => ({
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeDays(days) {
+  const source = Array.isArray(days) ? days : [];
+  return [...new Set(source.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b);
+}
+
+function normalizeTimes(times) {
+  const source = Array.isArray(times) ? times : [];
+  return [...new Set(source
+    .map((time) => String(time || '').trim())
+    .filter((time) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time)))]
+    .sort();
+}
+
+function rowToSchedule(row) {
+  if (!row) return null;
+  return {
     ...row,
-    prompts: JSON.parse(row.prompts),
+    prompts: parseJsonArray(row.prompts),
+    days_of_week: normalizeDays(parseJsonArray(row.days_of_week)),
+    times: normalizeTimes(parseJsonArray(row.times)),
     enabled: Boolean(row.enabled)
+  };
+}
+
+function normalizeSchedulePayload(payload = {}, existing = {}) {
+  return {
+    name: String(payload.name ?? existing.name ?? 'Scheduled automation').trim() || 'Scheduled automation',
+    topic: String(payload.topic ?? existing.topic ?? '').trim(),
+    days_of_week: normalizeDays(payload.days_of_week ?? existing.days_of_week ?? [1, 2, 3, 4, 5]),
+    times: normalizeTimes(payload.times ?? existing.times ?? ['09:00']),
+    timezone: String(payload.timezone ?? existing.timezone ?? 'local').trim() || 'local',
+    enabled: Boolean(payload.enabled ?? existing.enabled ?? true)
+  };
+}
+
+function cronFromSchedule(schedule) {
+  const [hour = '9', minute = '0'] = (schedule.times[0] || '09:00').split(':');
+  const days = schedule.days_of_week.length ? schedule.days_of_week.join(',') : '1-5';
+  return `${Number(minute)} ${Number(hour)} * * ${days}`;
+}
+
+automationRouter.get('/runs', (_req, res) => {
+  const rows = db.prepare(`SELECT jobs.*, slideshows.title, slideshows.created_at AS slideshow_created_at
+    FROM jobs JOIN slideshows ON slideshows.id = jobs.slideshow_id
+    ORDER BY jobs.updated_at DESC LIMIT 40`).all();
+  res.json(rows.map((job) => ({
+    ...job,
+    output_name: job.output_path ? job.output_path.split('/').pop() : null
   })));
+});
+
+automationRouter.get('/recipes/:id/schedules', (req, res) => {
+  res.json(db.prepare('SELECT * FROM schedules WHERE recipe_id = ? ORDER BY updated_at DESC').all(req.params.id).map(rowToSchedule));
+});
+
+automationRouter.post('/recipes/:id/schedules', (req, res) => {
+  const recipe = coreRowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Automation recipe not found' });
+  const schedule = normalizeSchedulePayload(req.body);
+  if (!schedule.topic) return res.status(400).json({ error: 'Add a run topic before scheduling automation.' });
+  if (!schedule.days_of_week.length || !schedule.times.length) return res.status(400).json({ error: 'Choose at least one day and one run time.' });
+  const id = uuid();
+  const now = nowIso();
+  db.prepare(`INSERT INTO schedules
+    (id, name, cron, template_id, recipe_id, topic, days_of_week, times, timezone, prompts, enabled, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    id,
+    schedule.name,
+    cronFromSchedule(schedule),
+    '',
+    recipe.id,
+    schedule.topic,
+    JSON.stringify(schedule.days_of_week),
+    JSON.stringify(schedule.times),
+    schedule.timezone,
+    JSON.stringify([schedule.topic]),
+    schedule.enabled ? 1 : 0,
+    now,
+    now
+  );
+  reloadSchedules();
+  res.status(201).json(rowToSchedule(db.prepare('SELECT * FROM schedules WHERE id = ?').get(id)));
+});
+
+automationRouter.put('/recipes/:recipeId/schedules/:scheduleId', (req, res) => {
+  const existing = rowToSchedule(db.prepare('SELECT * FROM schedules WHERE id = ? AND recipe_id = ?').get(req.params.scheduleId, req.params.recipeId));
+  if (!existing) return res.status(404).json({ error: 'Schedule not found' });
+  const schedule = normalizeSchedulePayload(req.body, existing);
+  if (!schedule.topic) return res.status(400).json({ error: 'Add a run topic before scheduling automation.' });
+  if (!schedule.days_of_week.length || !schedule.times.length) return res.status(400).json({ error: 'Choose at least one day and one run time.' });
+  const now = nowIso();
+  db.prepare(`UPDATE schedules SET name = ?, cron = ?, topic = ?, days_of_week = ?, times = ?, timezone = ?, prompts = ?, enabled = ?, updated_at = ?
+    WHERE id = ? AND recipe_id = ?`).run(
+    schedule.name,
+    cronFromSchedule(schedule),
+    schedule.topic,
+    JSON.stringify(schedule.days_of_week),
+    JSON.stringify(schedule.times),
+    schedule.timezone,
+    JSON.stringify([schedule.topic]),
+    schedule.enabled ? 1 : 0,
+    now,
+    req.params.scheduleId,
+    req.params.recipeId
+  );
+  reloadSchedules();
+  res.json(rowToSchedule(db.prepare('SELECT * FROM schedules WHERE id = ?').get(req.params.scheduleId)));
+});
+
+automationRouter.delete('/recipes/:recipeId/schedules/:scheduleId', (req, res) => {
+  db.prepare('DELETE FROM schedules WHERE id = ? AND recipe_id = ?').run(req.params.scheduleId, req.params.recipeId);
+  reloadSchedules();
+  res.status(204).end();
+});
+
+automationRouter.get('/schedules', (_req, res) => {
+  res.json(db.prepare('SELECT * FROM schedules ORDER BY updated_at DESC').all().map(rowToSchedule));
 });
 
 automationRouter.post('/schedules', (req, res) => {

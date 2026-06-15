@@ -39,7 +39,7 @@ export default function SlideCanvas({ slide, settings }) {
         <div className={`grid h-full w-full ${gridClass(slide?.image_layout)}`}>
           {(urls.length ? urls : ['']).map((url, index) => (
             <div key={`${url}-${index}`} className="flex h-full w-full items-center justify-center bg-neutral-900">
-              {url && <img src={url} alt="" className="h-full w-full object-contain object-center" />}
+              {url && <img src={url} alt="" className="h-full w-full object-cover object-center" />}
             </div>
           ))}
         </div>
