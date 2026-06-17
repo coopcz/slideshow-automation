@@ -65,6 +65,22 @@ ensureColumn('schedules', 'days_of_week', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('schedules', 'times', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('schedules', 'timezone', "TEXT NOT NULL DEFAULT 'local'");
 
+const productsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='products'").get();
+if (!productsTable) {
+  db.exec(`CREATE TABLE products (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    app_name TEXT NOT NULL DEFAULT '',
+    niche TEXT NOT NULL DEFAULT '',
+    brief_overview TEXT NOT NULL DEFAULT '',
+    comprehensive_overview TEXT NOT NULL DEFAULT '',
+    target_audience TEXT NOT NULL DEFAULT '',
+    ai_memory TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+}
+
 export function nowIso() {
   return new Date().toISOString();
 }

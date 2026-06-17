@@ -9,9 +9,8 @@ export function useSlideshow() {
   const refresh = useCallback(async () => {
     const list = await api('/api/slideshows');
     setSlideshows(list);
-    if (!current && list[0]) setCurrent(list[0]);
     setLoading(false);
-  }, [current]);
+  }, []);
 
   useEffect(() => {
     refresh().catch(() => setLoading(false));

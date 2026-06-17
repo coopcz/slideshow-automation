@@ -11,6 +11,7 @@ import { renderRouter } from './routes/render.js';
 import { jobsRouter } from './routes/jobs.js';
 import { exportsRouter } from './routes/exports.js';
 import { automationRouter } from './routes/automation.js';
+import { productsRouter } from './routes/products.js';
 import { cleanupOldExports } from './cleanup.js';
 import { reloadSchedules } from './scheduler.js';
 
@@ -30,6 +31,7 @@ app.use('/api', renderRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/exports', exportsRouter);
 app.use('/api/automation', automationRouter);
+app.use('/api/products', productsRouter);
 
 const clientDist = path.join(config.rootDir, 'client', 'dist');
 if (fs.existsSync(clientDist)) {

@@ -1,4 +1,4 @@
-import { Image, Loader2, PanelLeftClose, PanelLeftOpen, Plus, Save, Settings, Sparkles } from 'lucide-react';
+import { Image, Loader2, Plus, Save, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import AutomationStudio from './AutomationStudio.jsx';
@@ -46,7 +46,6 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
   const [selectedId, setSelectedId] = useState(slideshow.slides[0]?.id);
   const [picker, setPicker] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [imageLibraryOpen, setImageLibraryOpen] = useState(true);
   const [workspaceTab, setWorkspaceTab] = useState('edit');
   const [prompt, setPrompt] = useState('');
   const [automationStatus, setAutomationStatus] = useState('');
@@ -126,28 +125,7 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
         </div>
       </header>
 
-      <main className={imageLibraryOpen ? 'grid min-h-0 grid-cols-[270px_1fr_360px]' : 'grid min-h-0 grid-cols-[56px_1fr_360px]'}>
-        <aside className="min-h-0 border-r border-line bg-paper">
-          {imageLibraryOpen ? (
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="flex items-center justify-end border-b border-line px-3 py-3">
-                <button className="flex h-9 w-9 items-center justify-center border border-line bg-white" title="Hide image library" onClick={() => setImageLibraryOpen(false)}>
-                  <PanelLeftClose size={17} />
-                </button>
-              </div>
-              <div className="min-h-0 flex-1">
-                <ImageLibrary />
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-full flex-col items-center bg-paper py-3">
-              <button className="flex h-10 w-10 items-center justify-center border border-line bg-white" title="Show image library" onClick={() => setImageLibraryOpen(true)}>
-                <PanelLeftOpen size={18} />
-              </button>
-              <div className="mt-4 rotate-180 text-[11px] font-bold uppercase tracking-wide text-ink/50 [writing-mode:vertical-rl]">Image Library</div>
-            </div>
-          )}
-        </aside>
+      <main className="grid min-h-0 grid-cols-[1fr_360px]">
         <section className="min-h-0">
           <SlideCanvas slide={selected} settings={slideshow.settings} />
         </section>
