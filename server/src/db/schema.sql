@@ -80,3 +80,18 @@ CREATE TABLE IF NOT EXISTS automation_recipes (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS automation_batch_runs (
+  id TEXT PRIMARY KEY,
+  recipe_id TEXT NOT NULL,
+  theme TEXT NOT NULL,
+  status TEXT NOT NULL,
+  total_topics INTEGER NOT NULL DEFAULT 0,
+  completed_topics INTEGER NOT NULL DEFAULT 0,
+  topics TEXT NOT NULL DEFAULT '[]',
+  results TEXT NOT NULL DEFAULT '[]',
+  error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(recipe_id) REFERENCES automation_recipes(id) ON DELETE CASCADE
+);

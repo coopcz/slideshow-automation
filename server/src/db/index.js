@@ -64,6 +64,25 @@ ensureColumn('schedules', 'topic', "TEXT NOT NULL DEFAULT ''");
 ensureColumn('schedules', 'days_of_week', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('schedules', 'times', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('schedules', 'timezone', "TEXT NOT NULL DEFAULT 'local'");
+ensureColumn('schedules', 'prompt_index', 'INTEGER NOT NULL DEFAULT 0');
+
+const batchRunsTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'automation_batch_runs'").get();
+if (!batchRunsTable) {
+  db.exec(`CREATE TABLE automation_batch_runs (
+    id TEXT PRIMARY KEY,
+    recipe_id TEXT NOT NULL,
+    theme TEXT NOT NULL,
+    status TEXT NOT NULL,
+    total_topics INTEGER NOT NULL DEFAULT 0,
+    completed_topics INTEGER NOT NULL DEFAULT 0,
+    topics TEXT NOT NULL DEFAULT '[]',
+    results TEXT NOT NULL DEFAULT '[]',
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(recipe_id) REFERENCES automation_recipes(id) ON DELETE CASCADE
+  )`);
+}
 
 const productsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='products'").get();
 if (!productsTable) {

@@ -138,6 +138,22 @@ const imageMatchSchema = {
   }
 };
 
+const topicBatchSchema = {
+  name: 'slideshow_batch_topics',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      topics: {
+        type: 'array',
+        items: { type: 'string' }
+      }
+    },
+    required: ['topics']
+  }
+};
+
 function imagePromptBlock(images) {
   if (!images.length) return 'No local images are available. Return image_id as an empty string.';
   return 'For each slide, return image_id as an empty string. Write image_hint as a concrete visual search phrase describing the ideal uploaded local-library image for that slide. A separate matching step will choose images from the local library after the slide text is finalized.';
@@ -192,6 +208,74 @@ async function callLlm(prompt, images = [], recipe = defaultRecipe()) {
     return JSON.parse(response.content[0].text);
   }
   return null;
+}
+
+function fallbackTopics(theme, count) {
+  const base = String(theme || '').trim() || 'scripture study';
+  return Array.from({ length: count }, (_, index) => `${base}: practical slideshow topic ${index + 1}`);
+}
+
+function normalizeTopics(topics, theme, count) {
+  const seen = new Set();
+  const clean = (Array.isArray(topics) ? topics : [])
+    .map((topic) => String(topic || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((topic) => {
+      const key = topic.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, count);
+  if (clean.length >= count) return clean;
+  return [...clean, ...fallbackTopics(theme, count - clean.length)];
+}
+
+function topicGenerationPrompt(recipe, theme, count) {
+  return `Generate ${count} distinct slideshow topics for a batch automation run.
+
+Overarching theme:
+${theme}
+
+Recipe context:
+- Type: ${recipe.slideshow_type}
+- Product: ${recipe.product_name}
+- Audience: ${recipe.audience}
+- Goal: ${recipe.goal}
+- Voice: ${recipe.voice}
+- Progression: ${recipe.progression}
+
+Each topic should be specific enough to generate one complete short-form slideshow. Avoid duplicates, avoid numbering in the topic text, and keep each topic under 90 characters.`;
+}
+
+export async function generateBatchTopics(theme, recipeInput = defaultRecipe(), count = 50) {
+  const recipe = normalizeRecipePayload(recipeInput);
+  const topicCount = Math.max(1, Math.min(Number(count || 50), 100));
+  const prompt = topicGenerationPrompt(recipe, theme, topicCount);
+
+  if (config.llm.openaiKey) {
+    const client = new OpenAI({ apiKey: config.llm.openaiKey });
+    const response = await client.chat.completions.create({
+      model: config.llm.openaiModel,
+      response_format: { type: 'json_schema', json_schema: topicBatchSchema },
+      messages: [{ role: 'user', content: prompt }]
+    });
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return normalizeTopics(parsed.topics, theme, topicCount);
+  }
+
+  if (config.llm.anthropicKey) {
+    const client = new Anthropic({ apiKey: config.llm.anthropicKey });
+    const response = await client.messages.create({
+      model: 'claude-3-5-haiku-latest',
+      max_tokens: 2200,
+      messages: [{ role: 'user', content: `${prompt}\n\nReturn only JSON in this exact shape: {"topics":["topic"]}` }]
+    });
+    const parsed = JSON.parse(response.content[0].text);
+    return normalizeTopics(parsed.topics, theme, topicCount);
+  }
+
+  return fallbackTopics(theme, topicCount);
 }
 
 function fallbackGenerated(prompt, recipe = defaultRecipe()) {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildSchemaPrompt, defaultRecipe, normalizeRecipePayload } from '../src/automation/core.js';
+import { buildSchemaPrompt, defaultRecipe, generateBatchTopics, normalizeRecipePayload } from '../src/automation/core.js';
+import { config } from '../src/config.js';
 import { cronExpressionForTime } from '../src/scheduler.js';
 
 test('normalizeRecipePayload clamps and defaults recipe settings', () => {
@@ -39,4 +40,20 @@ test('buildSchemaPrompt includes automation creative controls', () => {
 
 test('cronExpressionForTime creates one precise weekly expression per selected time', () => {
   assert.equal(cronExpressionForTime('10:30', [1, 3, 5]), '30 10 * * 1,3,5');
+});
+
+test('generateBatchTopics falls back to requested theme without an LLM key', async () => {
+  const openaiKey = config.llm.openaiKey;
+  const anthropicKey = config.llm.anthropicKey;
+  config.llm.openaiKey = '';
+  config.llm.anthropicKey = '';
+  try {
+    const topics = await generateBatchTopics('Book of Mormon study habits', defaultRecipe(), 3);
+
+    assert.equal(topics.length, 3);
+    assert.match(topics[0], /Book of Mormon study habits/);
+  } finally {
+    config.llm.openaiKey = openaiKey;
+    config.llm.anthropicKey = anthropicKey;
+  }
 });

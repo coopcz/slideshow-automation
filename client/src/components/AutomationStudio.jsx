@@ -23,7 +23,7 @@ const emptyRecipe = {
 
 const emptySchedule = {
   name: 'Weekly automation',
-  topic: '',
+  prompts: [],
   days_of_week: [1, 2, 3, 4, 5],
   times: ['09:00'],
   timezone: 'local',
@@ -66,6 +66,9 @@ export default function AutomationStudio({ onOpenSlideshow, onStatus }) {
   const [schedules, setSchedules] = useState([]);
   const [scheduleDraft, setScheduleDraft] = useState(emptySchedule);
   const [runs, setRuns] = useState([]);
+  const [batchTheme, setBatchTheme] = useState('');
+  const [batchTopicCount, setBatchTopicCount] = useState(50);
+  const [batchRuns, setBatchRuns] = useState([]);
   const [busy, setBusy] = useState('');
 
   const selectedRecipe = useMemo(() => recipes.find((recipe) => recipe.id === selectedId), [recipes, selectedId]);
@@ -93,20 +96,29 @@ export default function AutomationStudio({ onOpenSlideshow, onStatus }) {
     }
     const next = await api(`/api/automation/recipes/${recipeId}/schedules`);
     setSchedules(next);
-    setScheduleDraft(next[0] || emptySchedule);
+    const first = next[0];
+    setScheduleDraft(first ? { ...emptySchedule, ...first, prompts: Array.isArray(first.prompts) ? first.prompts : [] } : emptySchedule);
   }
 
   async function refreshRuns() {
     setRuns(await api('/api/automation/runs'));
   }
 
+  async function refreshBatchRuns() {
+    setBatchRuns(await api('/api/automation/batch-runs'));
+  }
+
   useEffect(() => {
     refreshRecipes().then((recipeId) => refreshSchedules(recipeId)).catch(() => {});
     refreshRuns().catch(() => {});
+    refreshBatchRuns().catch(() => {});
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => refreshRuns().catch(() => {}), 5000);
+    const timer = setInterval(() => {
+      refreshRuns().catch(() => {});
+      refreshBatchRuns().catch(() => {});
+    }, 5000);
     return () => clearInterval(timer);
   }, []);
 
@@ -161,6 +173,28 @@ export default function AutomationStudio({ onOpenSlideshow, onStatus }) {
       onOpenSlideshow?.(result.slideshow);
       await refreshRuns();
       onStatus?.(result.job_id ? 'Automation finished and render was queued.' : 'Automation finished and opened as an editable slideshow.');
+    } catch (error) {
+      onStatus?.(error.message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function runBatch() {
+    if (!batchTheme.trim()) {
+      onStatus?.('Add a batch theme before starting batch mode.');
+      return;
+    }
+    setBusy('batch');
+    onStatus?.('Saving recipe and starting batch mode...');
+    try {
+      const saved = await persistRecipe();
+      await api(`/api/automation/recipes/${saved.id}/batch`, {
+        method: 'POST',
+        body: JSON.stringify({ theme: batchTheme, topic_count: batchTopicCount })
+      });
+      await refreshBatchRuns();
+      onStatus?.('Batch mode started. Topics will be generated first, then slideshows will run in order.');
     } catch (error) {
       onStatus?.(error.message);
     } finally {
@@ -344,10 +378,90 @@ export default function AutomationStudio({ onOpenSlideshow, onStatus }) {
         </button>
       </Section>
 
-      <Section title="Schedule">
-        <Field label="Scheduled topic">
-          <textarea className="min-h-16 border border-line bg-white p-2 normal-case text-sm font-normal" value={scheduleDraft.topic} onChange={(event) => patchSchedule({ topic: event.target.value })} />
+      <Section title="Batch Mode">
+        <Field label="Theme">
+          <textarea
+            className="min-h-20 border border-line bg-white p-2 normal-case text-sm font-normal"
+            placeholder="Overarching theme for the full batch"
+            value={batchTheme}
+            onChange={(event) => setBatchTheme(event.target.value)}
+          />
         </Field>
+        <Field label="Topics">
+          <input
+            type="number"
+            min="1"
+            max="100"
+            className="border border-line bg-white p-2 normal-case text-sm font-normal"
+            value={batchTopicCount}
+            onChange={(event) => setBatchTopicCount(Number(event.target.value))}
+          />
+        </Field>
+        <button className="flex items-center justify-center gap-2 bg-ink py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60" disabled={!batchTheme.trim() || Boolean(busy)} onClick={runBatch}>
+          {busy === 'batch' ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
+          {busy === 'batch' ? 'Starting batch...' : 'Generate topics and run batch'}
+        </button>
+        <div className="grid gap-2">
+          {batchRuns.slice(0, 4).map((batch) => (
+            <div key={batch.id} className="border-y border-line py-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate font-bold">{batch.theme}</div>
+                  <div className="mt-1 text-ink/55">
+                    {batch.status.replaceAll('_', ' ')} · {batch.completed_topics}/{batch.total_topics || batch.topics.length || batchTopicCount} · {formatDate(batch.updated_at)}
+                  </div>
+                </div>
+                {['queued', 'generating_topics', 'generating_slideshows'].includes(batch.status) && <Loader2 className="shrink-0 animate-spin text-ink/35" size={14} />}
+              </div>
+              {batch.topics.length > 0 && (
+                <div className="mt-2 max-h-28 overflow-auto border border-line bg-white p-2 text-ink/55">
+                  {batch.topics.map((topic, index) => (
+                    <div key={`${batch.id}-${index}`} className={index < batch.completed_topics ? 'text-ink' : ''}>{index + 1}. {topic}</div>
+                  ))}
+                </div>
+              )}
+              {batch.error && <div className="mt-2 text-red-600">{batch.error}</div>}
+            </div>
+          ))}
+          {batchRuns.length === 0 && <p className="text-xs text-ink/55">No batch runs yet.</p>}
+        </div>
+      </Section>
+
+      <Section title="Schedule">
+        <div className="grid gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase text-ink/60">Prompt Queue</span>
+            <button className="flex items-center gap-1 text-xs font-bold text-ink/60 hover:text-ink" onClick={() => patchSchedule({ prompts: [...(scheduleDraft.prompts || []), ''] })}>
+              <Plus size={12} /> Add prompt
+            </button>
+          </div>
+          {(scheduleDraft.prompts || []).length === 0 && (
+            <p className="border border-dashed border-line px-3 py-4 text-center text-xs text-ink/40">No prompts yet. Add prompts and they'll run in rotation each scheduled time.</p>
+          )}
+          <div className="grid gap-2">
+            {(scheduleDraft.prompts || []).map((prompt, index) => (
+              <div key={index} className="grid grid-cols-[20px_1fr_auto] items-start gap-2">
+                <span className="mt-2.5 text-center text-xs font-bold text-ink/30">{index + 1}</span>
+                <textarea
+                  className="min-h-[60px] border border-line bg-white p-2 text-sm normal-case font-normal resize-none"
+                  placeholder={`Prompt ${index + 1}`}
+                  value={prompt}
+                  onChange={(e) => {
+                    const next = [...scheduleDraft.prompts];
+                    next[index] = e.target.value;
+                    patchSchedule({ prompts: next });
+                  }}
+                />
+                <button className="mt-2 border border-line p-1.5 text-ink/40 hover:text-red-500" onClick={() => patchSchedule({ prompts: scheduleDraft.prompts.filter((_, i) => i !== index) })}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+          {(scheduleDraft.prompts || []).length > 1 && (
+            <p className="text-xs text-ink/45">Runs cycle through prompts in order, then repeat.</p>
+          )}
+        </div>
         <div className="grid grid-cols-7 gap-1">
           {weekdays.map(([label, day]) => (
             <button key={day} className={`border border-line py-2 text-xs font-bold ${scheduleDraft.days_of_week.includes(day) ? 'bg-ink text-white' : 'bg-white text-ink/65'}`} onClick={() => toggleDay(day)}>

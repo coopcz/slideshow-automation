@@ -58,7 +58,13 @@ async function runSchedule(schedule) {
   if (schedule.recipe_id) {
     const recipe = rowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(schedule.recipe_id));
     if (!recipe) return;
-    await runRecipeAutomation(recipe, schedule.topic || parseJsonArray(schedule.prompts)[0] || '', 'Queued by automation schedule');
+    const prompts = parseJsonArray(schedule.prompts);
+    const topic = prompts.length
+      ? prompts[Number(schedule.prompt_index || 0) % prompts.length]
+      : (schedule.topic || '');
+    const nextIndex = prompts.length ? (Number(schedule.prompt_index || 0) + 1) % prompts.length : 0;
+    db.prepare('UPDATE schedules SET prompt_index = ? WHERE id = ?').run(nextIndex, schedule.id);
+    await runRecipeAutomation(recipe, topic, 'Queued by automation schedule');
     return;
   }
 

@@ -1,6 +1,7 @@
-import { Brain, Calendar, ChevronRight, Copy, Edit3, Images, LayoutGrid, Plus, RefreshCw, Save, Settings, SkipForward, Trash2, X, Zap } from 'lucide-react';
+import { Brain, Calendar, ChevronRight, Copy, Edit3, Images, LayoutGrid, Plus, RefreshCw, Save, Settings, SkipForward, Trash2, Workflow, X, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import AutomationStudio from './AutomationStudio.jsx';
 import ImageLibrary from './ImageLibrary.jsx';
 
 function formatDate(value) {
@@ -296,10 +297,29 @@ function BrainPanel() {
 
 const navItems = [
   { id: 'slideshows', label: 'Slideshows', icon: LayoutGrid },
+  { id: 'automation', label: 'Automation', icon: Workflow },
   { id: 'images', label: 'Image Library', icon: Images },
   { id: 'brain', label: 'Brain', icon: Brain },
   { id: 'queue', label: 'Queue', icon: Calendar },
 ];
+
+function AutomationPanel({ onOpen }) {
+  const [status, setStatus] = useState('');
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-line px-6 py-4">
+        <div>
+          <h1 className="text-xl font-extrabold">Automation</h1>
+          <p className="text-sm text-ink/55">Recipes, schedules, and prompt queues</p>
+        </div>
+        {status && <p className="max-w-sm truncate text-xs text-ink/55">{status}</p>}
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <AutomationStudio onOpenSlideshow={onOpen} onStatus={setStatus} />
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard({ slideshows, onOpen, onCreate, onRefresh }) {
   const [activeTab, setActiveTab] = useState('slideshows');
@@ -354,6 +374,7 @@ export default function Dashboard({ slideshows, onOpen, onCreate, onRefresh }) {
           {activeTab === 'slideshows' && (
             <SlideshowsPanel slideshows={slideshows} onOpen={onOpen} onCreate={onCreate} onRefresh={onRefresh} />
           )}
+          {activeTab === 'automation' && <AutomationPanel onOpen={onOpen} />}
           {activeTab === 'images' && <ImageLibrary />}
           {activeTab === 'brain' && <BrainPanel />}
           {activeTab === 'queue' && <QueuePanel />}
