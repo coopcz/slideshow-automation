@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { db, nowIso, rowToSlideshow } from '../db/index.js';
 import { renderSlideshow } from '../renderer/renderSlideshow.js';
+import { googleDriveConfigured, uploadRenderedSlideshow } from '../integrations/googleDrive.js';
 
 const queue = [];
 let active = false;
@@ -9,8 +10,8 @@ function updateJob(id, fields) {
   const current = db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
   if (!current) return;
   const next = { ...current, ...fields, updated_at: nowIso() };
-  db.prepare(`UPDATE jobs SET status = ?, progress = ?, message = ?, output_path = ?, error = ?, updated_at = ? WHERE id = ?`)
-    .run(next.status, next.progress, next.message, next.output_path, next.error, next.updated_at, id);
+  db.prepare(`UPDATE jobs SET status = ?, progress = ?, message = ?, output_path = ?, drive_file_id = ?, drive_url = ?, error = ?, updated_at = ? WHERE id = ?`)
+    .run(next.status, next.progress, next.message, next.output_path, next.drive_file_id, next.drive_url, next.error, next.updated_at, id);
 }
 
 async function runNext() {
@@ -26,11 +27,23 @@ async function runNext() {
       slideshow,
       onProgress: ({ progress, message }) => updateJob(jobId, { status: 'processing', progress, message })
     });
+    let driveUpload = null;
+    let driveError = null;
+    if (googleDriveConfigured()) {
+      updateJob(jobId, { status: 'processing', progress: 94, message: 'Uploading to Google Drive...' });
+      try {
+        driveUpload = await uploadRenderedSlideshow({ slideshow, outputPath: result.outputPath, framePaths: result.framePaths });
+      } catch (error) {
+        driveError = error.message;
+      }
+    }
     updateJob(jobId, {
       status: 'completed',
       progress: 100,
-      message: 'Render complete',
-      output_path: result.outputPath
+      output_path: result.outputPath,
+      drive_file_id: driveUpload?.id || null,
+      drive_url: driveUpload?.url || null,
+      message: driveUpload ? 'Render complete and uploaded to Google Drive' : driveError ? `Render complete. Drive upload failed: ${driveError}` : 'Render complete'
     });
     db.prepare('UPDATE slideshows SET status = ?, updated_at = ? WHERE id = ?').run('rendered', nowIso(), slideshowId);
   } catch (error) {

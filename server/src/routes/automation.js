@@ -340,6 +340,22 @@ automationRouter.post('/generate', async (req, res) => {
   res.json({ ...slideshow, llm_used: llmUsed });
 });
 
+automationRouter.post('/topics', async (req, res) => {
+  const theme = String(req.body.theme || 'LDS scripture study for everyday family life').trim();
+  const count = Math.max(3, Math.min(Number(req.body.count || 6), 12));
+  const topics = await generateBatchTopics(theme, coreDefaultRecipe(), count);
+  res.json({ topics });
+});
+
+automationRouter.post('/quick-create', async (req, res) => {
+  const prompt = String(req.body.topic || req.body.prompt || '').trim();
+  if (!prompt) return res.status(400).json({ error: 'Add a topic first.' });
+  const { slideshow, llm_used: llmUsed } = await coreGenerateSlideshowFromPrompt(prompt, coreDefaultRecipe());
+  const saved = insertSlideshow(slideshow, 'draft');
+  const jobId = enqueueSlideshowRender(saved.id, 'Rendering and uploading to Google Drive');
+  res.status(202).json({ slideshow: saved, job_id: jobId, llm_used: llmUsed });
+});
+
 automationRouter.post('/templates', (req, res) => {
   const source = normalizeSlideshow(req.body);
   const template = templateFromSlideshow(source);

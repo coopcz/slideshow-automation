@@ -19,6 +19,13 @@ fs.mkdirSync(config.uploadsDir, { recursive: true });
 fs.mkdirSync(config.exportsDir, { recursive: true });
 
 const app = express();
+app.disable('x-powered-by');
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 app.use(cors({ origin: config.clientOrigin, credentials: false }));
 app.use(express.json({ limit: '5mb' }));
 app.use('/uploads', express.static(config.uploadsDir));
@@ -39,10 +46,18 @@ if (fs.existsSync(clientDist)) {
   app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
 
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  const multerLimit = String(error?.code || '').startsWith('LIMIT_');
+  const status = multerLimit ? 413 : Number(error?.status) || 500;
+  const message = error?.publicMessage || (multerLimit ? 'Upload limit exceeded' : 'Request failed');
+  res.status(status).json({ error: message });
+});
+
 cron.schedule('0 3 * * *', cleanupOldExports);
 cleanupOldExports();
 reloadSchedules();
 
-app.listen(config.port, () => {
-  console.log(`Slideshow Automation server listening on http://localhost:${config.port}`);
+app.listen(config.port, config.host, () => {
+  console.log(`Slideshow Automation server listening on http://${config.host}:${config.port}`);
 });

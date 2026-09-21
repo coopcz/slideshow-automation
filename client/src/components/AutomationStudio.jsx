@@ -1,4 +1,4 @@
-import { Download, Loader2, Play, Plus, Save, Trash2 } from 'lucide-react';
+import { Download, ExternalLink, Loader2, Play, Plus, Save, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 
@@ -6,12 +6,12 @@ const emptyRecipe = {
   name: 'Latter Study evergreen slideshow',
   slideshow_type: 'educational',
   product_name: 'Latter Study',
-  audience: 'LDS individuals and families who want consistent scripture study',
-  goal: 'Promote Latter Study while teaching practical scripture study ideas.',
-  voice: 'Faithful, thoughtful, respectful, practical, never combative.',
+  audience: 'LDS moms who want scripture study to feel useful, realistic, and spiritually grounded at home',
+  goal: 'Help an LDS mom teach or apply one specific gospel insight, with a quiet and natural mention of Latter Study only when it genuinely fits.',
+  voice: 'Write like a thoughtful LDS mom texting another mom after scripture study. Warm, specific, plainspoken, doctrinally careful, occasionally personal, never preachy, salesy, combative, or over-polished.',
   word_spacing: 'balanced',
   image_instructions: 'Choose concrete scripture study, family, faith, learning, object, setting, or story images that support each slide.',
-  progression: 'Hook the viewer, explain the study principle, show why it matters, give practical application, then mention the product naturally near the end.',
+  progression: 'Open with a specific tension or surprising observation. Build one connected idea using scripture context, a lived family moment, or a practical example. End with a useful takeaway. Mention the product on no more than one slide.',
   aspect_ratio: '9:16',
   prompt_template: 'Create a slideshow about {{topic}}. Connect the lesson to consistent scripture study for individuals and families, and naturally mention {{product_name}} near the end.',
   slide_count: 8,
@@ -510,9 +510,10 @@ export default function AutomationStudio({ onOpenSlideshow, onStatus }) {
                 <div className="mt-1 text-ink/55">{item.status} · {item.progress}% · {formatDate(item.updated_at)}</div>
               </div>
               {item.status === 'completed' ? (
-                <a className="flex h-8 w-8 items-center justify-center border border-line bg-white" title="Download" href={`/api/jobs/${item.id}/download`}>
-                  <Download size={14} />
-                </a>
+                <div className="flex gap-1">
+                  {item.drive_url && <a className="flex h-8 w-8 items-center justify-center border border-line bg-white" title="Open in Google Drive" href={item.drive_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /></a>}
+                  <a className="flex h-8 w-8 items-center justify-center border border-line bg-white" title="Download" href={`/api/jobs/${item.id}/download`}><Download size={14} /></a>
+                </div>
               ) : (
                 <div className="flex h-8 w-8 items-center justify-center text-ink/35">
                   {item.status === 'processing' || item.status === 'queued' ? <Loader2 className="animate-spin" size={14} /> : null}

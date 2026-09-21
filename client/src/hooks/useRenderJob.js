@@ -11,7 +11,6 @@ export function useRenderJob(jobId) {
       const next = await api(`/api/jobs/${jobId}/status`).catch(() => null);
       if (!active || !next) return;
       setJob(next);
-      if (next.status === 'completed') window.location.href = `/api/jobs/${jobId}/download`;
       if (!['completed', 'failed'].includes(next.status)) setTimeout(poll, 3000);
     }
     poll();

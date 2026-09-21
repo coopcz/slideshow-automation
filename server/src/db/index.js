@@ -65,6 +65,8 @@ ensureColumn('schedules', 'days_of_week', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('schedules', 'times', "TEXT NOT NULL DEFAULT '[]'");
 ensureColumn('schedules', 'timezone', "TEXT NOT NULL DEFAULT 'local'");
 ensureColumn('schedules', 'prompt_index', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('jobs', 'drive_file_id', 'TEXT');
+ensureColumn('jobs', 'drive_url', 'TEXT');
 
 const batchRunsTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'automation_batch_runs'").get();
 if (!batchRunsTable) {

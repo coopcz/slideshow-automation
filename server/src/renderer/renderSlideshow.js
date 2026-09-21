@@ -59,11 +59,11 @@ export async function renderSlideshow({ slideshow, onProgress = () => {} }) {
     onProgress({ progress: 82, message: 'Assembling video...' });
     const outputPath = path.join(outDir, `${slideshow.id}.mp4`);
     await assembleVideo({ frames, outputPath, duration: slideshow.settings.slide_duration || 4, transition: slideshow.settings.transition || 'none' });
-    return { outputPath, type: 'video/mp4' };
+    return { outputPath, type: 'video/mp4', framePaths: frames.map((frame) => frame.path) };
   }
 
   onProgress({ progress: 86, message: 'Creating image ZIP...' });
   const outputPath = path.join(outDir, `${slideshow.id}.zip`);
   await zipDirectory(frames.map((frame) => frame.path), outputPath, safeFolderName(slideshow.title, slideshow.id));
-  return { outputPath, type: 'application/zip' };
+  return { outputPath, type: 'application/zip', framePaths: frames.map((frame) => frame.path) };
 }

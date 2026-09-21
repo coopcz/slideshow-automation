@@ -12,15 +12,15 @@ export function defaultRecipe() {
     name: 'Latter Study evergreen slideshow',
     slideshow_type: 'educational',
     product_name: 'Latter Study',
-    audience: 'LDS individuals and families who want consistent scripture study',
-    goal: 'Promote Latter Study as a faithful AI-assisted scripture study app while teaching useful gospel study ideas.',
-    voice: 'Faithful, thoughtful, respectful, practical, never combative.',
+    audience: 'LDS moms who want scripture study to feel useful, realistic, and spiritually grounded at home',
+    goal: 'Help an LDS mom teach or apply one specific gospel insight, with a quiet and natural mention of Latter Study only when it genuinely fits.',
+    voice: 'Write like a thoughtful LDS mom texting another mom after scripture study. Warm, specific, plainspoken, doctrinally careful, occasionally personal, never preachy, salesy, combative, or over-polished.',
     word_spacing: 'balanced',
     image_instructions: 'Choose concrete scripture study, family, faith, learning, object, setting, or story images that support each slide.',
-    progression: 'Hook the viewer, explain the study principle, show why it matters, give practical application, then mention the product naturally near the end.',
+    progression: 'Use one cover slide followed by six numbered teaching points. Each point needs a short headline and one useful supporting sentence.',
     aspect_ratio: '9:16',
     prompt_template: 'Create a slideshow about {{topic}}. Connect the lesson to consistent scripture study for individuals and families, and naturally mention {{product_name}} near the end.',
-    slide_count: 8,
+    slide_count: 7,
     export_as_video: false,
     transition: 'none',
     image_strategy: 'relevant',
@@ -85,8 +85,11 @@ const slideshowSchema = {
           additionalProperties: false,
           properties: {
             order: { type: 'integer' },
+            purpose: { type: 'string', enum: ['cover', 'context', 'insight', 'example', 'practice', 'reflection', 'close'] },
             image_id: { type: 'string' },
             image_hint: { type: 'string' },
+            headline: { type: 'string' },
+            body: { type: 'string' },
             text_items: {
               type: 'array',
               items: {
@@ -105,7 +108,7 @@ const slideshowSchema = {
               }
             }
           },
-          required: ['order', 'image_id', 'image_hint', 'text_items']
+          required: ['order', 'purpose', 'image_id', 'image_hint', 'headline', 'body', 'text_items']
         }
       }
     },
@@ -160,9 +163,9 @@ function imagePromptBlock(images) {
 }
 
 function captionGuidance(recipe) {
-  if (recipe.word_spacing === 'concise') return 'Keep each slide to 8 to 16 words total. Use short lines with generous visual breathing room.';
-  if (recipe.word_spacing === 'detailed') return 'Use 18 to 32 words total per slide, split into two readable lines when helpful.';
-  return 'Use 14 to 24 words total per slide, split into one hook line and one support line when helpful.';
+  if (recipe.word_spacing === 'concise') return 'Use a 3 to 8 word headline and no more than 12 body words.';
+  if (recipe.word_spacing === 'detailed') return 'Use a 3 to 9 word headline and 12 to 24 body words.';
+  return 'Use a 3 to 9 word headline and 8 to 18 body words.';
 }
 
 export function buildSchemaPrompt(prompt, images = [], recipe = defaultRecipe()) {
@@ -177,9 +180,25 @@ Progression: ${recipe.progression}
 Image instructions: ${recipe.image_instructions}
 Image strategy: ${recipe.image_strategy}
 
-Create exactly ${recipe.slide_count} slides. Each slide should have exactly one text item. Keep the copy readable on a phone, avoid background text styles, and make the product placement feel natural instead of repeated. If the topic is sensitive or controversial, frame claims carefully and focus on learning, context, scripture, and sincere discipleship.
+Create exactly 7 slides in this fixed structure:
+- Slide 1 is the cover. Its headline is "6 Things We Learn from [specific topic]" or an equally clear title. Its body is exactly "Brought to you by ${recipe.product_name}".
+- Slides 2 through 7 contain six numbered teaching points. Start each headline with its number, for example "1. Joseph heard the same message again".
+- Each numbered slide has one direct supporting sentence of 10 to 22 words.
+- Return a concrete, different full-screen image hint for every slide.
+- Set purpose to cover for slide 1. Use the other purposes naturally for the six teaching slides.
+- Return text_items as an empty array; the app applies the fixed TikTok typography.
 
-Use TikTokSans-Regular, outline, center alignment, center position, and 80% width for every text item.
+Human writing rules:
+- Sound like one real LDS mom with lived experience, not a ministry brand or a generic inspirational account.
+- Make every slide advance the thought. Do not restate the hook, recycle the same lesson, or use interchangeable captions.
+- Use concrete details such as a rushed morning, a child asking a blunt question, a verse read differently, a Primary lesson, family scripture study, or a quiet prompting when relevant.
+- Do not fabricate a personal anecdote, a child's words, or a testimony. If the user did not supply a real experience, use an honest scenario such as "If your child says..." or "Some mornings..." rather than pretending it happened to the creator.
+- Never use I, me, my, we, or our unless the user supplied that exact lived experience. A warm human voice does not require a fake first-person story.
+- Vary sentence length and slide purpose. Do not make every slide a tip, a question, or a motivational statement.
+- Avoid rhetorical filler, slogans, em dashes, semicolons, hashtags, clickbait, and formulaic three-part lists.
+- Never invent quotations, doctrine, scripture references, historical claims, or personal testimony. When a reference is important, name it accurately and conservatively.
+- Mention ${recipe.product_name} only in the cover body. Do not mention it again.
+- Keep the copy readable on a phone.
 
 ${imagePromptBlock(images)}
 
@@ -212,26 +231,45 @@ async function callLlm(prompt, images = [], recipe = defaultRecipe()) {
 
 function fallbackTopics(theme, count) {
   const base = String(theme || '').trim() || 'scripture study';
-  return Array.from({ length: count }, (_, index) => `${base}: practical slideshow topic ${index + 1}`);
+  const angles = [
+    'a question a child might ask', 'a verse that lands differently as a mom', 'a five minute family study reset',
+    'a common scripture study guilt trap', 'a quiet lesson from an ordinary morning', 'context that changes how a familiar verse reads',
+    'what to do when family study goes sideways', 'a simple Come Follow Me conversation', 'a gospel principle for an exhausted parent',
+    'a faithful response to a hard question', 'a small habit that makes study more honest', 'a lesson worth saving for Sunday'
+  ];
+  return Array.from({ length: count }, (_, index) => `${base}: ${angles[index % angles.length]}${index >= angles.length ? ` (${Math.floor(index / angles.length) + 1})` : ''}`);
+}
+
+function topicTokens(value) {
+  return new Set(String(value || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((word) => word.length > 3));
+}
+
+function topicSimilarity(left, right) {
+  const a = topicTokens(left);
+  const b = topicTokens(right);
+  const intersection = [...a].filter((token) => b.has(token)).length;
+  const union = new Set([...a, ...b]).size;
+  return union ? intersection / union : 0;
 }
 
 function normalizeTopics(topics, theme, count) {
   const seen = new Set();
-  const clean = (Array.isArray(topics) ? topics : [])
-    .map((topic) => String(topic || '').replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .filter((topic) => {
-      const key = topic.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, count);
+  const clean = [];
+  for (const rawTopic of Array.isArray(topics) ? topics : []) {
+    const topic = String(rawTopic || '').replace(/\s+/g, ' ').trim();
+    if (!topic) continue;
+    const key = topic.toLowerCase();
+    if (seen.has(key) || clean.some((existing) => topicSimilarity(existing, topic) >= 0.62)) continue;
+    seen.add(key);
+    clean.push(topic);
+    if (clean.length === count) break;
+  }
   if (clean.length >= count) return clean;
   return [...clean, ...fallbackTopics(theme, count - clean.length)];
 }
 
 function topicGenerationPrompt(recipe, theme, count) {
+  const recentTitles = db.prepare('SELECT title FROM slideshows ORDER BY created_at DESC LIMIT 80').all().map((row) => row.title).filter(Boolean);
   return `Generate ${count} distinct slideshow topics for a batch automation run.
 
 Overarching theme:
@@ -245,7 +283,10 @@ Recipe context:
 - Voice: ${recipe.voice}
 - Progression: ${recipe.progression}
 
-Each topic should be specific enough to generate one complete short-form slideshow. Avoid duplicates, avoid numbering in the topic text, and keep each topic under 90 characters.`;
+Recent slideshow titles to avoid repeating or lightly rewording:
+${recentTitles.length ? recentTitles.map((title) => `- ${title}`).join('\n') : '- None yet'}
+
+Each topic must have a distinct human situation, scripture-study question, doctrinal lens, family moment, or practical outcome. A different verse pasted into the same topic pattern does not count as unique. Avoid generic themes such as "finding peace," "trusting God," or "making scripture study a habit" unless the topic includes a sharply specific angle. Avoid duplicates, numbering, and title formulas. Keep each topic under 90 characters.`;
 }
 
 export async function generateBatchTopics(theme, recipeInput = defaultRecipe(), count = 50) {
@@ -373,25 +414,54 @@ function applyImages(slides, images, topicContext = '', recipe = defaultRecipe()
   });
 }
 
-function nativeCaptionItems(items = [], recipe = defaultRecipe()) {
-  const text = items
-    .map((item) => String(item.text || '').trim())
-    .filter(Boolean)
-    .join('\n');
-
-  const fontSize = recipe.word_spacing === 'detailed' || text.length > 130 ? 'medium' : 'large';
-  const textWidth = recipe.word_spacing === 'concise' ? '80%' : '100%';
-
-  return [createTextItem({
+function nativeCaptionItems(slide = {}, recipe = defaultRecipe()) {
+  const sourceText = (slide.text_items || []).map((item) => String(item.text || '').trim()).filter(Boolean);
+  const headline = String(slide.headline || sourceText[0] || '').trim();
+  const body = String(slide.body || sourceText.slice(1).join(' ') || '').trim();
+  const headlineSize = headline.length > 58 ? 'large' : 'extra_large';
+  const centered = true;
+  const items = [createTextItem({
     order: 0,
-    text,
+    role: 'headline',
+    text: headline,
     font: 'TikTokSans-Regular',
-    font_size: fontSize,
+    font_size: headlineSize,
     text_style: 'outline',
     text_position: 'center',
-    text_alignment: 'center',
-    text_width: textWidth
+    text_alignment: centered ? 'center' : 'left',
+    text_width: '100%'
   })];
+  if (body) items.push(createTextItem({
+    order: 1,
+    role: 'body',
+    text: body,
+    font: 'TikTokSans-Regular',
+    font_size: body.length > 105 ? 'medium' : 'large',
+    text_style: 'outline',
+    text_position: 'center',
+    text_alignment: centered ? 'center' : 'left',
+    text_width: '100%'
+  }));
+  return items;
+}
+
+function compositionForSlide(slide = {}, index = 0) {
+  const purpose = slide.purpose || (index === 0 ? 'hook' : 'insight');
+  const positionByPurpose = {
+    cover: 'center',
+    context: 'bottom',
+    insight: 'top',
+    example: 'bottom',
+    practice: 'center',
+    reflection: 'center',
+    close: 'center'
+  };
+  return {
+    aspect_ratio: null,
+    text_position: positionByPurpose[purpose] || 'center',
+    is_bg_overlay_on: true,
+    background_opacity: 12
+  };
 }
 
 export function recipePrompt(recipe, topic = '') {
@@ -426,13 +496,18 @@ export async function generateSlideshowFromPrompt(prompt, recipeInput = defaultR
       ...defaultSettings,
       aspect_ratio: recipe.aspect_ratio,
       export_as_video: Boolean(recipe.export_as_video),
-      transition: recipe.transition || 'none'
+      transition: recipe.transition || 'none',
+      is_bg_overlay_on: true,
+      background_opacity: 12
     },
     slides: applyImages(generated.slides, images, prompt, recipe, preferredImageIds).map((slide, index) => createSlide({
       order: index,
       image_url: slide.image_url,
       image_urls: slide.image_urls,
-      text_items: nativeCaptionItems(slide.text_items, recipe)
+      purpose: slide.purpose,
+      image_hint: slide.image_hint,
+      overrides: compositionForSlide(slide, index),
+      text_items: nativeCaptionItems(slide, recipe)
     }))
   });
   return { slideshow, llm_used: true };

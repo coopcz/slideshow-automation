@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   progress INTEGER NOT NULL DEFAULT 0,
   message TEXT NOT NULL DEFAULT '',
   output_path TEXT,
+  drive_file_id TEXT,
+  drive_url TEXT,
   error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,

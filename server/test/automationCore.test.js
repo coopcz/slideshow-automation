@@ -35,7 +35,8 @@ test('buildSchemaPrompt includes automation creative controls', () => {
   assert.match(prompt, /Caption spacing: concise/);
   assert.match(prompt, /Use bright product screenshots/);
   assert.match(prompt, /Problem, insight, workflow, result/);
-  assert.match(prompt, /Create exactly 6 slides/);
+  assert.match(prompt, /Create exactly 7 slides in this fixed structure/);
+  assert.match(prompt, /Slides 2 through 7 contain six numbered teaching points/);
 });
 
 test('cronExpressionForTime creates one precise weekly expression per selected time', () => {

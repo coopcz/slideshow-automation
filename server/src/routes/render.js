@@ -8,6 +8,12 @@ export const renderRouter = express.Router();
 renderRouter.post('/slideshows/:id/render', (req, res) => {
   const slideshow = db.prepare('SELECT id FROM slideshows WHERE id = ?').get(req.params.id);
   if (!slideshow) return res.status(404).json({ error: 'Slideshow not found' });
+
+  const existingJob = db.prepare(`SELECT id FROM jobs
+    WHERE slideshow_id = ? AND type = 'render' AND status IN ('queued', 'processing')
+    ORDER BY created_at DESC LIMIT 1`).get(req.params.id);
+  if (existingJob) return res.status(202).json({ job_id: existingJob.id, reused: true });
+
   const id = uuid();
   const now = nowIso();
   db.prepare(`INSERT INTO jobs (id, slideshow_id, type, status, progress, message, created_at, updated_at)

@@ -134,7 +134,7 @@ function renderTextSvg(slide, settings, width, height) {
     const fontSize = Math.round(height * (fontSizeRatios[item.font_size] || fontSizeRatios.large));
     const maxWidth = Math.round(width * (Number.parseInt(item.text_width || '80', 10) / 100));
     const lines = wrapText(item.text, maxWidth, fontSize, item.font);
-    const lineHeight = Math.round(fontSize * 1.15);
+    const lineHeight = Math.round(fontSize * (item.role === 'body' ? 1.28 : 1.08));
     const paddingX = Math.round(fontSize * 0.45);
     const paddingY = Math.round(fontSize * 0.25);
     const textWidth = Math.min(maxWidth, Math.max(...lines.map((line) => estimateWidth(line, fontSize, item.font)), 1));
@@ -142,7 +142,7 @@ function renderTextSvg(slide, settings, width, height) {
     return { item, fontSize, maxWidth, lines, lineHeight, paddingX, paddingY, textWidth, textHeight, blockHeight: textHeight + paddingY * 2 };
   });
 
-  const stackGap = Math.round(height * 0.018);
+  const stackGap = Math.round(height * 0.014);
   const stackHeight = blocks.reduce((sum, block) => sum + block.blockHeight, 0) + Math.max(0, blocks.length - 1) * stackGap;
   const resolvedPosition = slide.overrides?.text_position || settings.text_position || 'center';
   let y = Math.round(height * 0.1);
@@ -167,11 +167,12 @@ function renderTextSvg(slide, settings, width, height) {
     const textX = align === 'left' ? x + paddingX : align === 'right' ? x + boxWidth - paddingX : x + boxWidth / 2;
     const fontStyle = item.font === 'CormorantGaramond-Italic' ? 'italic' : 'normal';
     const fontWeight = item.font === 'Inter-Bold' || item.font === 'TikTokSans-Regular' ? '700' : '400';
-    const stroke = colors.stroke ? ` stroke="${colors.stroke}" stroke-width="${Math.max(2, Math.round(fontSize * 0.08))}" paint-order="stroke"` : '';
+    const stroke = colors.stroke ? ` stroke="${colors.stroke}" stroke-width="${Math.max(2, Math.round(fontSize * 0.055))}" paint-order="stroke"` : '';
+    const shadow = colors.stroke ? '' : ' style="filter:drop-shadow(0 3px 5px rgba(0,0,0,.8))"';
 
     lines.forEach((line, index) => {
       const textY = y + paddingY + fontSize + index * lineHeight;
-      parts.push(`<text x="${textX}" y="${textY}" text-anchor="${anchor}" font-family="${fontFamilies[item.font] || fontFamilies['Inter-Bold']}" font-size="${fontSize}" font-style="${fontStyle}" font-weight="${fontWeight}" fill="${colors.fill}"${stroke}>${escapeXml(line)}</text>`);
+      parts.push(`<text x="${textX}" y="${textY}" text-anchor="${anchor}" font-family="${fontFamilies[item.font] || fontFamilies['Inter-Bold']}" font-size="${fontSize}" font-style="${fontStyle}" font-weight="${fontWeight}" fill="${colors.fill}"${stroke}${shadow}>${escapeXml(line)}</text>`);
     });
     y += blockHeight + stackGap;
   }

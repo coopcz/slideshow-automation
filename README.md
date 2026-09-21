@@ -1,5 +1,7 @@
 # Slideshow Automation
 
+## This readme is made by AI because I ain't got time to do that
+
 Self-hosted local web app for creating image slideshows, editing text overlays, and exporting either MP4 video or a ZIP of rendered PNG slides. It is single-user, filesystem-backed, and has no accounts, credits, TikTok integration, or external image sourcing.
 
 ## Features
@@ -52,6 +54,13 @@ Open `http://localhost:4000`. The Docker image includes FFmpeg and serves the bu
 - `OPENAI_MODEL`: OpenAI model used for slideshow writing and image-library matching. Default: `gpt-5.5`.
 - `OPENAI_IMAGE_DESCRIPTION_MODEL`: OpenAI vision-capable model used to describe uploaded images before matching. Default: `gpt-4o-mini`.
 - `ANTHROPIC_API_KEY`: Enables prompt-to-slideshow generation with Anthropic if OpenAI is not set.
+- `GOOGLE_DRIVE_FOLDER_ID`: Optional destination folder. Completed PNG slideshows upload as a folder of individual PNGs; videos upload as MP4 files.
+- `GOOGLE_OAUTH_CLIENT_FILE`: Path to a Desktop app OAuth client JSON file. Recommended for uploading to a personal My Drive folder.
+- `GOOGLE_OAUTH_TOKEN_FILE`: Where the local authorization token is stored. Default: `./data/google-drive-token.json`.
+- `GOOGLE_SERVICE_ACCOUNT_FILE`: Path to a Google service-account JSON key. Share the destination Drive folder with the service account email.
+- `GOOGLE_SERVICE_ACCOUNT_JSON`: Inline service-account JSON, useful in hosted environments. Use this or `GOOGLE_SERVICE_ACCOUNT_FILE`, not both.
+
+For a personal Google Drive folder, create a Desktop app OAuth client in Google Cloud, set `GOOGLE_OAUTH_CLIENT_FILE`, and run `npm run google:auth` once. Service accounts should only be used with a Shared Drive because service accounts do not have personal Drive storage quota.
 
 ## Fonts
 

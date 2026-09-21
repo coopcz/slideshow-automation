@@ -12,11 +12,19 @@ export const config = {
   rootDir,
   dataDir,
   port: Number(process.env.PORT || 4000),
+  host: process.env.SERVER_HOST || '127.0.0.1',
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   uploadsDir: path.join(dataDir, 'uploads'),
   exportsDir: path.join(dataDir, 'exports'),
   dbPath: path.join(dataDir, 'slideshows.db'),
   exportTtlDays: Number(process.env.EXPORT_TTL_DAYS || 7),
+  googleDrive: {
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
+    oauthClientFile: process.env.GOOGLE_OAUTH_CLIENT_FILE || '',
+    oauthTokenFile: process.env.GOOGLE_OAUTH_TOKEN_FILE || path.join(dataDir, 'google-drive-token.json'),
+    serviceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '',
+    serviceAccountFile: process.env.GOOGLE_SERVICE_ACCOUNT_FILE || ''
+  },
   llm: {
     openaiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-5.5',

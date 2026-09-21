@@ -30,11 +30,14 @@ export default function SlideCanvas({ slide, settings }) {
   const opacity = slide?.overrides?.background_opacity ?? settings.background_opacity;
   const position = slide?.overrides?.text_position || settings.text_position;
   const urls = slide?.image_layout === 'single' ? [slide?.image_url] : slide?.image_urls || [];
+  const ratios = { '9:16': '9 / 16', '4:5': '4 / 5', '1:1': '1 / 1', '16:9': '16 / 9' };
+  const ratio = slide?.overrides?.aspect_ratio || settings.aspect_ratio || '1:1';
 
   return (
     <div className="flex h-full items-center justify-center bg-[#ded8ce] px-8 py-6">
       <div
-        className="relative aspect-square max-h-full w-full max-w-[620px] overflow-hidden bg-neutral-950 shadow-[0_24px_70px_rgba(0,0,0,.22)] ring-1 ring-black/10 [container-type:size]"
+        className="relative max-h-full w-full max-w-[620px] overflow-hidden bg-neutral-950 shadow-[0_24px_70px_rgba(0,0,0,.22)] ring-1 ring-black/10 [container-type:size]"
+        style={{ aspectRatio: ratios[ratio] || ratios['1:1'] }}
       >
         <div className={`grid h-full w-full ${gridClass(slide?.image_layout)}`}>
           {(urls.length ? urls : ['']).map((url, index) => (
@@ -52,7 +55,7 @@ export default function SlideCanvas({ slide, settings }) {
               textAlign: item.text_alignment,
               fontSize: sizeMap[item.font_size],
               fontFamily: 'TikTok Sans',
-              fontWeight: 850,
+              fontWeight: item.role === 'body' ? 650 : 850,
               fontStyle: 'normal'
             }}>
               {item.text || 'Text'}

@@ -29,6 +29,7 @@ export function createTextItem(overrides = {}) {
     text_position: 'center',
     text_alignment: 'center',
     order: 0,
+    role: 'body',
     ...overrides
   };
 }

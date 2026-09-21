@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { db } from '../db/index.js';
 
 export const exportsRouter = express.Router();
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 exportsRouter.get('/', (_req, res) => {
   const jobs = db.prepare(`SELECT jobs.*, slideshows.title
@@ -14,7 +15,11 @@ exportsRouter.get('/', (_req, res) => {
 });
 
 exportsRouter.delete('/:slideshowId', (req, res) => {
-  fs.rmSync(path.join(config.exportsDir, req.params.slideshowId), { recursive: true, force: true });
+  if (!uuidPattern.test(req.params.slideshowId)) return res.status(400).json({ error: 'Invalid slideshow ID' });
+  const exportPath = path.resolve(config.exportsDir, req.params.slideshowId);
+  const exportRoot = `${path.resolve(config.exportsDir)}${path.sep}`;
+  if (!exportPath.startsWith(exportRoot)) return res.status(400).json({ error: 'Invalid export path' });
+  fs.rmSync(exportPath, { recursive: true, force: true });
   db.prepare('UPDATE jobs SET output_path = NULL WHERE slideshow_id = ?').run(req.params.slideshowId);
   res.status(204).end();
 });

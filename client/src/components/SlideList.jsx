@@ -6,8 +6,8 @@ import { CSS } from '@dnd-kit/utilities';
 function SortableSlide({ slide, selected, onSelect, onDuplicate, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: slide.id });
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`group flex w-36 shrink-0 flex-col border ${selected ? 'border-accent' : 'border-line'} bg-paper`}>
-      <button onClick={onSelect} className="aspect-[4/5] overflow-hidden bg-ink">
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`group flex w-24 shrink-0 flex-col border ${selected ? 'border-[#657052]' : 'border-line'} bg-paper`}>
+      <button onClick={onSelect} className="aspect-[9/16] overflow-hidden bg-ink">
         {slide.image_url ? <img src={slide.image_url} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-neutral-800" />}
       </button>
       <div className="flex items-center justify-between border-t border-line px-2 py-1">

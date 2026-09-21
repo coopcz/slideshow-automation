@@ -1,396 +1,106 @@
-import { Brain, Calendar, ChevronRight, Copy, Edit3, Images, LayoutGrid, Plus, RefreshCw, Save, Settings, SkipForward, Trash2, Workflow, X, Zap } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ArrowRight, Copy, Edit3, Image, Loader2, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { api } from '../api.js';
-import AutomationStudio from './AutomationStudio.jsx';
 import ImageLibrary from './ImageLibrary.jsx';
 
 function formatDate(value) {
-  if (!value) return 'Not saved';
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
-}
-
-function SlideshowsPanel({ slideshows, onOpen, onCreate, onRefresh }) {
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-6 py-4">
-        <div>
-          <h1 className="text-xl font-extrabold">Slideshows</h1>
-          <p className="text-sm text-ink/55">{slideshows.length} project{slideshows.length === 1 ? '' : 's'}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex h-10 w-10 items-center justify-center border border-line bg-white text-ink" title="Refresh" onClick={onRefresh}>
-            <RefreshCw size={16} />
-          </button>
-          <button className="flex h-10 items-center gap-2 bg-ink px-4 text-sm font-bold text-white" onClick={onCreate}>
-            <Plus size={16} /> New
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto px-6 py-4">
-        {slideshows.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <button className="flex items-center gap-2 border border-line bg-white px-4 py-3 text-sm font-bold" onClick={onCreate}>
-              <Plus size={16} /> Create slideshow
-            </button>
-          </div>
-        ) : (
-          <div className="min-w-[720px] divide-y divide-line border-y border-line">
-            {slideshows.map((show) => (
-              <div key={show.id} className="grid grid-cols-[72px_minmax(0,1fr)_120px_140px_112px] items-center gap-4 bg-paper py-3">
-                <button className="h-20 w-[64px] overflow-hidden bg-neutral-900 text-xs text-white/60" onClick={() => onOpen(show)} title={`Open ${show.title}`}>
-                  {show.slides[0]?.image_url ? <img src={show.slides[0].image_url} alt="" className="h-full w-full object-cover" /> : 'No image'}
-                </button>
-                <button className="min-w-0 text-left" onClick={() => onOpen(show)}>
-                  <div className="truncate text-sm font-bold">{show.title}</div>
-                  <div className="mt-1 text-xs text-ink/50">{show.slides.length} slide{show.slides.length === 1 ? '' : 's'}</div>
-                </button>
-                <div className="text-xs font-bold uppercase tracking-wide text-ink/50">{show.status}</div>
-                <div className="text-xs text-ink/55">{formatDate(show.updated_at)}</div>
-                <div className="flex justify-end gap-2">
-                  <button className="flex h-9 w-9 items-center justify-center border border-line bg-white" title="Edit" onClick={() => onOpen(show)}><Edit3 size={15} /></button>
-                  <button className="flex h-9 w-9 items-center justify-center border border-line bg-white" title="Duplicate" onClick={async () => { await api(`/api/slideshows/${show.id}/duplicate`, { method: 'POST' }); onRefresh(); }}><Copy size={15} /></button>
-                  <button className="flex h-9 w-9 items-center justify-center border border-line bg-white" title="Delete" onClick={async () => { await api(`/api/slideshows/${show.id}`, { method: 'DELETE' }); onRefresh(); }}><Trash2 size={15} /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function QueuePanel() {
-  const [schedules, setSchedules] = useState([]);
-  const [jobs, setJobs] = useState([]);
-
-  useEffect(() => {
-    api('/api/automation/schedules').then(setSchedules).catch(() => {});
-    api('/api/jobs?limit=20').then((data) => setJobs(Array.isArray(data) ? data : data?.jobs ?? [])).catch(() => {});
-  }, []);
-
-  async function deleteSchedule(id) {
-    await api(`/api/automation/schedules/${id}`, { method: 'DELETE' });
-    setSchedules((prev) => prev.filter((s) => s.id !== id));
-  }
-
-  async function toggleSchedule(schedule) {
-    const updated = await api(`/api/automation/schedules/${schedule.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled: !schedule.enabled }),
-    }).catch(() => null);
-    if (updated) setSchedules((prev) => prev.map((s) => s.id === schedule.id ? { ...s, enabled: !s.enabled } : s));
-  }
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-6 py-4">
-        <div>
-          <h1 className="text-xl font-extrabold">Queue</h1>
-          <p className="text-sm text-ink/55">Scheduled automation runs</p>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto px-6 py-6 space-y-6">
-        <div>
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-ink/50">Scheduled Automations</h2>
-          {schedules.length === 0 ? (
-            <div className="flex items-center gap-3 border border-line bg-white/60 px-4 py-6 text-sm text-ink/50">
-              <Calendar size={18} />
-              No scheduled automations. Set them up in the Automation Studio inside a slideshow.
-            </div>
-          ) : (
-            <div className="divide-y divide-line border border-line">
-              {schedules.map((schedule) => (
-                <div key={schedule.id} className="flex items-center justify-between gap-4 bg-paper px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold">{schedule.name || 'Unnamed schedule'}</div>
-                    <div className="mt-0.5 text-xs text-ink/50">
-                      {Array.isArray(schedule.times) ? schedule.times.join(', ') : schedule.times}
-                      {schedule.days_of_week && ` · ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_, i) => schedule.days_of_week.includes(i)).join(', ')}`}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold uppercase tracking-wide ${schedule.enabled ? 'text-green-600' : 'text-ink/40'}`}>
-                      {schedule.enabled ? 'Active' : 'Paused'}
-                    </span>
-                    <button className="flex h-8 w-8 items-center justify-center border border-line bg-white" title={schedule.enabled ? 'Pause' : 'Resume'} onClick={() => toggleSchedule(schedule)}>
-                      <SkipForward size={14} />
-                    </button>
-                    <button className="flex h-8 w-8 items-center justify-center border border-line bg-white text-red-500" title="Delete" onClick={() => deleteSchedule(schedule.id)}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-ink/50">Recent Jobs</h2>
-          {jobs.length === 0 ? (
-            <div className="flex items-center gap-3 border border-line bg-white/60 px-4 py-6 text-sm text-ink/50">
-              <Zap size={18} />
-              No render jobs yet.
-            </div>
-          ) : (
-            <div className="divide-y divide-line border border-line">
-              {jobs.map((job) => (
-                <div key={job.id} className="flex items-center justify-between gap-4 bg-paper px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold">{job.slideshow_title || job.id}</div>
-                    <div className="mt-0.5 text-xs text-ink/50">{formatDate(job.created_at)}</div>
-                  </div>
-                  <span className={`text-xs font-bold uppercase tracking-wide ${
-                    job.status === 'done' ? 'text-green-600' :
-                    job.status === 'error' ? 'text-red-500' :
-                    'text-ink/50'
-                  }`}>{job.status}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const emptyProduct = { name: '', app_name: '', niche: '', brief_overview: '', comprehensive_overview: '', target_audience: '', ai_memory: '' };
-
-function ProductForm({ initial = emptyProduct, onSave, onCancel }) {
-  const [form, setForm] = useState(initial);
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-6 py-4">
-        <h2 className="text-lg font-extrabold">{initial.id ? 'Edit Product' : 'New Product'}</h2>
-        <div className="flex items-center gap-2">
-          <button className="flex h-9 items-center gap-2 border border-line bg-white px-4 text-sm font-bold" onClick={onCancel}>Cancel</button>
-          <button className="flex h-9 items-center gap-2 bg-ink px-4 text-sm font-bold text-white" onClick={() => onSave(form)}>
-            <Save size={14} /> Save
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto px-6 py-5 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Product Name *">
-            <input className="border border-line bg-white px-3 py-2 text-sm w-full" value={form.name} onChange={set('name')} placeholder="Latter Study" />
-          </Field>
-          <Field label="App Name">
-            <input className="border border-line bg-white px-3 py-2 text-sm w-full" value={form.app_name} onChange={set('app_name')} placeholder="com.latterstudy" />
-          </Field>
-        </div>
-        <Field label="Niche">
-          <input className="border border-line bg-white px-3 py-2 text-sm w-full" value={form.niche} onChange={set('niche')} placeholder="LDS scripture study apps" />
-        </Field>
-        <Field label="Target Audience">
-          <input className="border border-line bg-white px-3 py-2 text-sm w-full" value={form.target_audience} onChange={set('target_audience')} placeholder="LDS individuals and families who want consistent scripture study" />
-        </Field>
-        <Field label="Brief Overview">
-          <textarea className="border border-line bg-white px-3 py-2 text-sm w-full min-h-[72px] resize-y" value={form.brief_overview} onChange={set('brief_overview')} placeholder="One or two sentences describing the product." />
-        </Field>
-        <Field label="Comprehensive Overview">
-          <textarea className="border border-line bg-white px-3 py-2 text-sm w-full min-h-[140px] resize-y" value={form.comprehensive_overview} onChange={set('comprehensive_overview')} placeholder="Full product description — features, benefits, value props, tone of voice, etc." />
-        </Field>
-        <Field label="AI Memory">
-          <textarea className="border border-line bg-white px-3 py-2 text-sm w-full min-h-[120px] resize-y font-mono" value={form.ai_memory} onChange={set('ai_memory')} placeholder={"Things the AI should always know:\n- Never mention competing apps\n- Always use a faithful, hopeful tone\n- Avoid overly churchy jargon"} />
-        </Field>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="grid gap-1">
-      <span className="text-xs font-bold uppercase tracking-wide text-ink/50">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function BrainPanel() {
-  const [products, setProducts] = useState([]);
-  const [editing, setEditing] = useState(null); // null = list, 'new' or product object = form
-
-  async function load() {
-    const data = await api('/api/products').catch(() => []);
-    setProducts(data);
-  }
-
-  useEffect(() => { load(); }, []);
-
-  async function handleSave(form) {
-    if (editing === 'new') {
-      await api('/api/products', { method: 'POST', body: JSON.stringify(form) });
-    } else {
-      await api(`/api/products/${editing.id}`, { method: 'PUT', body: JSON.stringify(form) });
-    }
-    await load();
-    setEditing(null);
-  }
-
-  async function handleDelete(id) {
-    await api(`/api/products/${id}`, { method: 'DELETE' });
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-  }
-
-  if (editing !== null) {
-    return (
-      <ProductForm
-        initial={editing === 'new' ? emptyProduct : editing}
-        onSave={handleSave}
-        onCancel={() => setEditing(null)}
-      />
-    );
-  }
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-6 py-4">
-        <div>
-          <h1 className="text-xl font-extrabold">Brain</h1>
-          <p className="text-sm text-ink/55">Products &amp; AI context</p>
-        </div>
-        <button className="flex h-10 items-center gap-2 bg-ink px-4 text-sm font-bold text-white" onClick={() => setEditing('new')}>
-          <Plus size={15} /> Add Product
-        </button>
-      </div>
-      <div className="flex-1 overflow-auto px-6 py-5">
-        {products.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <Brain size={36} className="text-ink/20" />
-            <p className="text-sm font-bold text-ink/40">No products yet</p>
-            <p className="text-xs text-ink/30 max-w-xs">Add a product so the AI knows who you are, what you sell, and how to talk about it.</p>
-            <button className="mt-2 flex items-center gap-2 border border-line bg-white px-4 py-2 text-sm font-bold" onClick={() => setEditing('new')}>
-              <Plus size={15} /> Add Product
-            </button>
-          </div>
-        ) : (
-          <div className="divide-y divide-line border border-line">
-            {products.map((product) => (
-              <div key={product.id} className="flex items-center gap-4 bg-paper px-4 py-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">{product.name}</span>
-                    {product.app_name && <span className="text-xs text-ink/40 font-mono">{product.app_name}</span>}
-                    {product.niche && <span className="rounded bg-ink/8 px-2 py-0.5 text-[11px] font-semibold text-ink/55">{product.niche}</span>}
-                  </div>
-                  {product.brief_overview && <p className="mt-0.5 text-xs text-ink/55 line-clamp-1">{product.brief_overview}</p>}
-                  {product.target_audience && <p className="mt-0.5 text-xs text-ink/40 line-clamp-1">Audience: {product.target_audience}</p>}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button className="flex h-8 w-8 items-center justify-center border border-line bg-white" title="Edit" onClick={() => setEditing(product)}><Edit3 size={14} /></button>
-                  <button className="flex h-8 w-8 items-center justify-center border border-line bg-white text-red-500" title="Delete" onClick={() => handleDelete(product.id)}><Trash2 size={14} /></button>
-                  <button className="flex h-8 w-8 items-center justify-center border border-line bg-white text-ink/40" title="View" onClick={() => setEditing(product)}><ChevronRight size={14} /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const navItems = [
-  { id: 'slideshows', label: 'Slideshows', icon: LayoutGrid },
-  { id: 'automation', label: 'Automation', icon: Workflow },
-  { id: 'images', label: 'Image Library', icon: Images },
-  { id: 'brain', label: 'Brain', icon: Brain },
-  { id: 'queue', label: 'Queue', icon: Calendar },
-];
-
-function AutomationPanel({ onOpen }) {
-  const [status, setStatus] = useState('');
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-6 py-4">
-        <div>
-          <h1 className="text-xl font-extrabold">Automation</h1>
-          <p className="text-sm text-ink/55">Recipes, schedules, and prompt queues</p>
-        </div>
-        {status && <p className="max-w-sm truncate text-xs text-ink/55">{status}</p>}
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <AutomationStudio onOpenSlideshow={onOpen} onStatus={setStatus} />
-      </div>
-    </div>
-  );
+  if (!value) return '';
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value));
 }
 
 export default function Dashboard({ slideshows, onOpen, onCreate, onRefresh }) {
-  const [activeTab, setActiveTab] = useState('slideshows');
+  const [view, setView] = useState('create');
+  const [topic, setTopic] = useState('');
+  const [theme, setTheme] = useState('Useful gospel lessons for LDS moms and families');
+  const [suggestions, setSuggestions] = useState([]);
+  const [busy, setBusy] = useState('');
+  const [status, setStatus] = useState('');
+
+  async function suggestTopics() {
+    setBusy('topics');
+    setStatus('Finding distinct topics...');
+    try {
+      const result = await api('/api/automation/topics', { method: 'POST', body: JSON.stringify({ theme, count: 6 }) });
+      setSuggestions(result.topics || []);
+      setStatus('Choose a topic or write your own.');
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function createSlideshow() {
+    if (!topic.trim()) return;
+    setBusy('create');
+    setStatus('Writing 7 slides, matching images, and preparing Google Drive...');
+    try {
+      const result = await api('/api/automation/quick-create', { method: 'POST', body: JSON.stringify({ topic }) });
+      await onRefresh();
+      onOpen(result.slideshow);
+    } catch (error) {
+      setStatus(error.message);
+      setBusy('');
+    }
+  }
 
   return (
-    <div className="flex h-screen bg-paper">
-      {/* Left Sidebar */}
-      <aside className="flex w-56 flex-shrink-0 flex-col border-r border-line bg-[#f5f2ed]">
-        <div className="flex items-center gap-2.5 px-4 py-5">
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-ink text-white">
-            <Zap size={16} fill="currentColor" />
-          </div>
-          <span className="text-base font-extrabold tracking-tight">SlideShow AI</span>
+    <div className="min-h-screen bg-[#f7f7f5] text-[#1f211d]">
+      <header className="sticky top-0 z-20 border-b border-black/10 bg-[#f7f7f5]/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-10">
+          <button className="text-lg font-extrabold tracking-[-0.03em]" onClick={() => setView('create')}>Latter Study Slides</button>
+          <nav className="flex items-center gap-1 rounded-full bg-black/[.045] p-1 text-sm font-semibold">
+            <button className={`rounded-full px-4 py-2 transition ${view === 'create' ? 'bg-white shadow-sm' : 'text-black/55 hover:text-black'}`} onClick={() => setView('create')}>Create</button>
+            <button className={`rounded-full px-4 py-2 transition ${view === 'images' ? 'bg-white shadow-sm' : 'text-black/55 hover:text-black'}`} onClick={() => setView('images')}>Images</button>
+          </nav>
         </div>
-        <nav className="flex flex-1 flex-col px-2">
-          <div className="space-y-0.5">
-            {navItems.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`flex w-full items-center gap-3 rounded px-3 py-2.5 text-sm font-semibold transition-colors ${
-                  activeTab === id
-                    ? 'bg-ink text-white'
-                    : 'text-ink/70 hover:bg-black/5 hover:text-ink'
-                }`}
-              >
-                <Icon size={16} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </nav>
-        <div className="border-t border-line p-2">
-          <button
-            className={`flex w-full items-center gap-3 rounded px-3 py-2.5 text-sm font-semibold transition-colors ${
-              activeTab === 'settings'
-                ? 'bg-ink text-white'
-                : 'text-ink/70 hover:bg-black/5 hover:text-ink'
-            }`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <Settings size={16} />
-            Settings
-          </button>
-        </div>
-      </aside>
+      </header>
 
-      {/* Main Content */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Panel content */}
-        <div className="min-h-0 flex-1 overflow-hidden">
-          {activeTab === 'slideshows' && (
-            <SlideshowsPanel slideshows={slideshows} onOpen={onOpen} onCreate={onCreate} onRefresh={onRefresh} />
-          )}
-          {activeTab === 'automation' && <AutomationPanel onOpen={onOpen} />}
-          {activeTab === 'images' && <ImageLibrary />}
-          {activeTab === 'brain' && <BrainPanel />}
-          {activeTab === 'queue' && <QueuePanel />}
-          {activeTab === 'settings' && (
-            <div className="flex h-full flex-col">
-              <div className="border-b border-line px-6 py-4">
-                <h1 className="text-xl font-extrabold">Settings</h1>
-                <p className="text-sm text-ink/55">Application preferences</p>
-              </div>
-              <div className="flex flex-1 items-center justify-center">
-                <p className="text-sm text-ink/40">Settings coming soon.</p>
-              </div>
+      {view === 'images' ? <main className="mx-auto h-[calc(100vh-64px)] max-w-7xl"><ImageLibrary /></main> : (
+        <main className="mx-auto max-w-7xl px-6 pb-20 pt-12 lg:px-10">
+          <section className="border-b border-black/10 pb-14">
+            <div className="border-l-2 border-[#657052] pl-6">
+              <label className="text-xs font-bold uppercase tracking-[.12em] text-black/50">Your topic</label>
+              <textarea autoFocus className="mt-2 min-h-32 w-full resize-none border-0 bg-transparent p-0 text-xl font-semibold leading-8 outline-none placeholder:text-black/25" placeholder="What Moroni’s visits teach us about repetition" value={topic} onChange={(event) => setTopic(event.target.value)} />
+              <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#1f211d] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-50" disabled={!topic.trim() || Boolean(busy)} onClick={createSlideshow}>
+                {busy === 'create' ? <Loader2 className="animate-spin" size={17} /> : <Sparkles size={17} />}{busy === 'create' ? 'Creating slideshow...' : 'Create slideshow'}
+              </button>
+              {status && <p className="mt-3 text-sm leading-6 text-black/50">{status}</p>}
             </div>
-          )}
-        </div>
-      </div>
+          </section>
+
+          <section className="grid gap-8 border-b border-black/10 py-12 lg:grid-cols-[260px_1fr]">
+            <div><h2 className="text-lg font-extrabold tracking-tight">Need an idea?</h2><p className="mt-2 text-sm leading-6 text-black/50">Generate six distinct topics, then choose the one worth making.</p></div>
+            <div>
+              <div className="flex gap-3">
+                <input className="min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-4 py-3 text-sm outline-none focus:border-[#657052]" value={theme} onChange={(event) => setTheme(event.target.value)} />
+                <button className="flex shrink-0 items-center gap-2 rounded-lg border border-black/15 bg-white px-4 py-3 text-sm font-bold hover:border-black/30 disabled:opacity-50" disabled={Boolean(busy)} onClick={suggestTopics}>{busy === 'topics' ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />} Suggest topics</button>
+              </div>
+              {suggestions.length > 0 && <div className="mt-5 divide-y divide-black/10 border-y border-black/10">{suggestions.map((item) => <button key={item} className="group flex w-full items-center justify-between gap-6 py-4 text-left text-sm font-semibold hover:text-[#657052]" onClick={() => { setTopic(item); window.scrollTo({ top: 0, behavior: 'smooth' }); }}><span>{item}</span><ArrowRight className="shrink-0 opacity-30 transition group-hover:translate-x-1 group-hover:opacity-100" size={16} /></button>)}</div>}
+            </div>
+          </section>
+
+          <section className="pt-12">
+            <div className="mb-6 flex items-end justify-between">
+              <div><h2 className="text-2xl font-extrabold tracking-[-0.03em]">Recent slideshows</h2><p className="mt-1 text-sm text-black/45">Open one to review text, replace an image, or publish again.</p></div>
+              <button className="flex items-center gap-2 text-sm font-bold text-black/55 hover:text-black" onClick={onCreate}><Plus size={16} /> Blank slideshow</button>
+            </div>
+            {slideshows.length === 0 ? <div className="border-y border-black/10 py-14 text-center text-sm text-black/40">Your generated slideshows will appear here.</div> : (
+              <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{slideshows.slice(0, 12).map((show) => (
+                <article key={show.id} className="group min-w-0">
+                  <button className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-[#20211f] text-white" onClick={() => onOpen(show)}>
+                    {show.slides[0]?.image_url ? <img src={show.slides[0].image_url} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]" /> : <div className="flex h-full items-center justify-center"><Image size={24} className="opacity-30" /></div>}<div className="absolute inset-0 bg-black/20" /><span className="absolute bottom-4 left-4 rounded-full bg-black/65 px-3 py-1.5 text-xs font-bold">{show.slides.length} slides</span>
+                  </button>
+                  <div className="mt-3 flex items-start justify-between gap-3">
+                    <button className="min-w-0 text-left" onClick={() => onOpen(show)}><h3 className="line-clamp-2 text-sm font-bold leading-5">{show.title}</h3><p className="mt-1 text-xs text-black/40">{formatDate(show.updated_at)}</p></button>
+                    <div className="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100"><button className="p-2 text-black/45 hover:text-black" title="Edit" onClick={() => onOpen(show)}><Edit3 size={15} /></button><button className="p-2 text-black/45 hover:text-black" title="Duplicate" onClick={async () => { await api(`/api/slideshows/${show.id}/duplicate`, { method: 'POST' }); onRefresh(); }}><Copy size={15} /></button><button className="p-2 text-black/45 hover:text-red-600" title="Delete" onClick={async () => { await api(`/api/slideshows/${show.id}`, { method: 'DELETE' }); onRefresh(); }}><Trash2 size={15} /></button></div>
+                  </div>
+                </article>
+              ))}</div>
+            )}
+          </section>
+        </main>
+      )}
     </div>
   );
 }
