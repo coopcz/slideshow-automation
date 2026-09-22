@@ -1,5 +1,6 @@
 import { ArrowLeft, Image, Save } from 'lucide-react';
 import { useState } from 'react';
+import AiRevisionPanel from './AiRevisionPanel.jsx';
 import ExportPanel from './ExportPanel.jsx';
 import ImageLibrary from './ImageLibrary.jsx';
 import SlideCanvas from './SlideCanvas.jsx';
@@ -89,6 +90,7 @@ export default function SlideComposer({ slideshow, onChange, onSave, onBack }) {
           <SlideCanvas slide={selected} settings={slideshow.settings} />
         </section>
         <aside className="min-h-0 overflow-auto border-l border-black/10 bg-[#f7f7f5]">
+              <AiRevisionPanel slideshow={slideshow} onChange={onChange} onSave={onSave} />
               <div className="border-b border-black/10 p-5">
                 <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[.12em] text-[#657052]">Slide {selected.order + 1}</p><h2 className="mt-1 text-lg font-extrabold">Edit the words</h2></div>
                 <div className="grid gap-3">

@@ -13,6 +13,7 @@ import {
   generateBatchTopics,
   generateSlideshowFromPrompt as coreGenerateSlideshowFromPrompt,
   normalizeRecipePayload,
+  reviseSlideshowCopy,
   rowToRecipe as coreRowToRecipe,
   runRecipeAutomation
 } from '../automation/core.js';
@@ -354,6 +355,26 @@ automationRouter.post('/quick-create', async (req, res) => {
   const saved = insertSlideshow(slideshow, 'draft');
   const jobId = enqueueSlideshowRender(saved.id, 'Rendering and uploading to Google Drive');
   res.status(202).json({ slideshow: saved, job_id: jobId, llm_used: llmUsed });
+});
+
+automationRouter.post('/slideshows/:id/revise', async (req, res, next) => {
+  try {
+    const row = db.prepare('SELECT * FROM slideshows WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Slideshow not found' });
+    const instruction = String(req.body.instruction || '').trim();
+    if (!instruction) return res.status(400).json({ error: 'Tell the AI what you want changed.' });
+    if (instruction.length > 2000) return res.status(400).json({ error: 'Keep the revision instruction under 2,000 characters.' });
+
+    const revised = await reviseSlideshowCopy(rowToSlideshow(row), instruction);
+    const now = nowIso();
+    db.prepare(`UPDATE slideshows SET title = ?, settings = ?, slides = ?, status = 'draft', updated_at = ? WHERE id = ?`)
+      .run(revised.title, JSON.stringify(revised.settings), JSON.stringify(revised.slides), now, req.params.id);
+    res.json({ slideshow: rowToSlideshow(db.prepare('SELECT * FROM slideshows WHERE id = ?').get(req.params.id)) });
+  } catch (error) {
+    error.status = error.message.includes('API key') ? 503 : 502;
+    error.publicMessage = error.message;
+    next(error);
+  }
 });
 
 automationRouter.post('/templates', (req, res) => {

@@ -12,9 +12,9 @@ export function defaultRecipe() {
     name: 'Latter Study evergreen slideshow',
     slideshow_type: 'educational',
     product_name: 'Latter Study',
-    audience: 'LDS moms who want scripture study to feel useful, realistic, and spiritually grounded at home',
+    audience: 'LDS parents and older Church members who want scripture study to feel useful, clear, realistic, and spiritually grounded',
     goal: 'Help an LDS mom teach or apply one specific gospel insight, with a quiet and natural mention of Latter Study only when it genuinely fits.',
-    voice: 'Write like a thoughtful LDS mom texting another mom after scripture study. Warm, specific, plainspoken, doctrinally careful, occasionally personal, never preachy, salesy, combative, or over-polished.',
+    voice: 'Write like a thoughtful LDS mom explaining one helpful idea to a friend. Warm, specific, plainspoken, doctrinally careful, easy for parents and older adults to follow, never preachy, salesy, combative, childish, or over-polished.',
     word_spacing: 'balanced',
     image_instructions: 'Choose concrete scripture study, family, faith, learning, object, setting, or story images that support each slide.',
     progression: 'Use one cover slide followed by six numbered teaching points. Each point needs a short headline and one useful supporting sentence.',
@@ -157,15 +157,41 @@ const topicBatchSchema = {
   }
 };
 
+const slideshowRevisionSchema = {
+  name: 'slideshow_copy_revision',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      title: { type: 'string' },
+      slides: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            order: { type: 'integer' },
+            headline: { type: 'string' },
+            body: { type: 'string' }
+          },
+          required: ['order', 'headline', 'body']
+        }
+      }
+    },
+    required: ['title', 'slides']
+  }
+};
+
 function imagePromptBlock(images) {
   if (!images.length) return 'No local images are available. Return image_id as an empty string.';
   return 'For each slide, return image_id as an empty string. Write image_hint as a concrete visual search phrase describing the ideal uploaded local-library image for that slide. A separate matching step will choose images from the local library after the slide text is finalized.';
 }
 
 function captionGuidance(recipe) {
-  if (recipe.word_spacing === 'concise') return 'Use a 3 to 8 word headline and no more than 12 body words.';
-  if (recipe.word_spacing === 'detailed') return 'Use a 3 to 9 word headline and 12 to 24 body words.';
-  return 'Use a 3 to 9 word headline and 8 to 18 body words.';
+  if (recipe.word_spacing === 'concise') return 'Use a 3 to 7 word headline and no more than 10 body words.';
+  if (recipe.word_spacing === 'detailed') return 'Use a 3 to 8 word headline and 10 to 18 body words.';
+  return 'Use a 3 to 8 word headline and 8 to 16 body words.';
 }
 
 export function buildSchemaPrompt(prompt, images = [], recipe = defaultRecipe()) {
@@ -183,13 +209,17 @@ Image strategy: ${recipe.image_strategy}
 Create exactly 7 slides in this fixed structure:
 - Slide 1 is the cover. Its headline is "6 Things We Learn from [specific topic]" or an equally clear title. Its body is exactly "Brought to you by ${recipe.product_name}".
 - Slides 2 through 7 contain six numbered teaching points. Start each headline with its number, for example "1. Joseph heard the same message again".
-- Each numbered slide has one direct supporting sentence of 10 to 22 words.
+- Each numbered slide has one direct supporting sentence of 8 to 16 words.
 - Return a concrete, different full-screen image hint for every slide.
 - Set purpose to cover for slide 1. Use the other purposes naturally for the six teaching slides.
 - Return text_items as an empty array; the app applies the fixed TikTok typography.
 
 Human writing rules:
 - Sound like one real LDS mom with lived experience, not a ministry brand or a generic inspirational account.
+- Write for busy parents and older Church members. Use familiar everyday words, short sentences, and one clear idea at a time.
+- Aim for roughly a sixth-grade reading level without sounding childish or talking down to the reader.
+- Prefer direct wording such as "This helps us notice..." over abstract wording such as "This facilitates deeper spiritual comprehension."
+- Keep common LDS terms when they are the clearest words, but avoid academic, theological, corporate, and therapy-style language.
 - Make every slide advance the thought. Do not restate the hook, recycle the same lesson, or use interchangeable captions.
 - Use concrete details such as a rushed morning, a child asking a blunt question, a verse read differently, a Primary lesson, family scripture study, or a quiet prompting when relevant.
 - Do not fabricate a personal anecdote, a child's words, or a testimony. If the user did not supply a real experience, use an honest scenario such as "If your child says..." or "Some mornings..." rather than pretending it happened to the creator.
@@ -227,6 +257,112 @@ async function callLlm(prompt, images = [], recipe = defaultRecipe()) {
     return JSON.parse(response.content[0].text);
   }
   return null;
+}
+
+function revisionPrompt(slideshow, instruction) {
+  const currentCopy = {
+    title: slideshow.title,
+    slides: slideshow.slides.map((slide, index) => {
+      const items = [...(slide.text_items || [])].sort((a, b) => a.order - b.order);
+      return {
+        order: index,
+        headline: String(items[0]?.text || ''),
+        body: items.slice(1).map((item) => item.text).join(' ').trim()
+      };
+    })
+  };
+
+  return `Revise the wording of an existing LDS TikTok slideshow.
+
+The user's editing instruction:
+${instruction}
+
+Always follow these writing standards:
+- Write for LDS parents and older Church members.
+- Use familiar everyday words, short sentences, active voice, and one idea at a time.
+- Aim for roughly a sixth-grade reading level without sounding childish or patronizing.
+- Keep headlines to about 3 to 8 words and supporting sentences to about 8 to 16 words.
+- Sound like a thoughtful LDS mom helping a friend: warm, natural, specific, and doctrinally careful.
+- Avoid academic, theological, corporate, therapy-style, trendy, flowery, or vague wording.
+- Preserve the intended doctrine and factual meaning. Never invent scripture quotations, references, history, personal stories, or testimony.
+- Keep every slide meaningfully different. Do not repeat the same lesson in new words.
+- Preserve the number at the beginning of numbered headlines unless the user clearly asks for a different structure.
+- Preserve any existing "Brought to you by" attribution unless the user specifically asks to change it.
+- Return exactly ${currentCopy.slides.length} slides in the same order. Do not add, remove, or combine slides.
+- Change only the title and wording. Images, formatting, and layout are preserved by the app.
+
+Current slideshow copy:
+${JSON.stringify(currentCopy, null, 2)}`;
+}
+
+function parseJsonText(value) {
+  const text = String(value || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  return JSON.parse(text);
+}
+
+async function callRevisionLlm(slideshow, instruction) {
+  const prompt = revisionPrompt(slideshow, instruction);
+  if (config.llm.openaiKey) {
+    const client = new OpenAI({ apiKey: config.llm.openaiKey });
+    const response = await client.chat.completions.create({
+      model: config.llm.openaiModel,
+      response_format: { type: 'json_schema', json_schema: slideshowRevisionSchema },
+      messages: [{ role: 'user', content: prompt }]
+    });
+    return parseJsonText(response.choices[0].message.content);
+  }
+  if (config.llm.anthropicKey) {
+    const client = new Anthropic({ apiKey: config.llm.anthropicKey });
+    const response = await client.messages.create({
+      model: 'claude-3-5-haiku-latest',
+      max_tokens: 1800,
+      messages: [{ role: 'user', content: `${prompt}\n\nReturn only JSON with this shape: {"title":"...","slides":[{"order":0,"headline":"...","body":"..."}]}` }]
+    });
+    return parseJsonText(response.content[0]?.text);
+  }
+  throw new Error('Connect an OpenAI or Anthropic API key before using AI revisions.');
+}
+
+function revisedTextItems(slide, revision) {
+  const existing = [...(slide.text_items || [])].sort((a, b) => a.order - b.order);
+  const headline = String(revision?.headline || existing[0]?.text || '').trim();
+  const body = String(revision?.body || '').trim();
+  const headlineItem = {
+    ...(existing[0] || createTextItem({ role: 'headline' })),
+    text: headline,
+    role: 'headline',
+    order: 0
+  };
+  if (!body) return [headlineItem];
+  const bodyItem = {
+    ...(existing[1] || createTextItem({ role: 'body', font_size: 'large' })),
+    text: body,
+    role: 'body',
+    order: 1
+  };
+  return [headlineItem, bodyItem];
+}
+
+export function applySlideshowRevision(slideshow, revision) {
+  const revisions = new Map((revision?.slides || []).map((slide) => [Number(slide.order), slide]));
+  return {
+    ...slideshow,
+    title: String(revision?.title || slideshow.title).trim() || slideshow.title,
+    slides: slideshow.slides.map((slide, index) => ({
+      ...slide,
+      text_items: revisedTextItems(slide, revisions.get(index))
+    }))
+  };
+}
+
+export async function reviseSlideshowCopy(slideshow, instruction) {
+  const cleanInstruction = String(instruction || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+  if (!cleanInstruction) throw new Error('Add an instruction for the AI first.');
+  const revision = await callRevisionLlm(slideshow, cleanInstruction);
+  if (!Array.isArray(revision?.slides) || revision.slides.length !== slideshow.slides.length) {
+    throw new Error('The AI returned the wrong number of slides. Please try again.');
+  }
+  return applySlideshowRevision(slideshow, revision);
 }
 
 function fallbackTopics(theme, count) {
