@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applySlideshowRevision, buildSchemaPrompt, defaultRecipe, generateBatchTopics, normalizeRecipePayload } from '../src/automation/core.js';
+import { applySlideshowRevision, buildSchemaPrompt, defaultRecipe, generateBatchTopics, normalizeRecipePayload, recipePrompt } from '../src/automation/core.js';
 import { config } from '../src/config.js';
 import { cronExpressionForTime } from '../src/scheduler.js';
 
@@ -39,6 +39,12 @@ test('buildSchemaPrompt includes automation creative controls', () => {
   assert.match(prompt, /Slides 2 through 7 contain six numbered teaching points/);
   assert.match(prompt, /sixth-grade reading level/);
   assert.match(prompt, /parents and older Church members/);
+});
+
+test('saved recipe inserts the selected topic into its prompt', () => {
+  const prompt = recipePrompt({ ...defaultRecipe(), prompt_template: 'Teach {{topic}} to {{audience}} for {{product_name}}.' }, 'Moroni’s visits');
+  assert.match(prompt, /Teach Moroni’s visits to LDS parents and older Church members/);
+  assert.match(prompt, /for Latter Study/);
 });
 
 test('applySlideshowRevision changes copy while preserving slide design and images', () => {

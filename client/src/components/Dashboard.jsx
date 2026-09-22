@@ -1,6 +1,7 @@
 import { ArrowRight, Copy, Edit3, Image, Loader2, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import AutomationSettings from './AutomationSettings.jsx';
 import ImageLibrary from './ImageLibrary.jsx';
 
 function formatDate(value) {
@@ -15,6 +16,18 @@ export default function Dashboard({ slideshows, onOpen, onCreate, onRefresh }) {
   const [suggestions, setSuggestions] = useState([]);
   const [busy, setBusy] = useState('');
   const [status, setStatus] = useState('');
+  const [recipes, setRecipes] = useState([]);
+  const [recipeId, setRecipeId] = useState('');
+
+  async function refreshRecipes() {
+    const next = await api('/api/automation/recipes');
+    setRecipes(next);
+    setRecipeId((current) => next.some((recipe) => recipe.id === current) ? current : '');
+  }
+
+  useEffect(() => {
+    refreshRecipes().catch(() => {});
+  }, []);
 
   async function suggestTopics() {
     setBusy('topics');
@@ -35,7 +48,7 @@ export default function Dashboard({ slideshows, onOpen, onCreate, onRefresh }) {
     setBusy('create');
     setStatus('Writing 7 slides, matching images, and preparing Google Drive...');
     try {
-      const result = await api('/api/automation/quick-create', { method: 'POST', body: JSON.stringify({ topic }) });
+      const result = await api('/api/automation/quick-create', { method: 'POST', body: JSON.stringify({ topic, recipe_id: recipeId || undefined }) });
       await onRefresh();
       onOpen(result.slideshow);
     } catch (error) {
@@ -52,16 +65,27 @@ export default function Dashboard({ slideshows, onOpen, onCreate, onRefresh }) {
           <nav className="flex items-center gap-1 rounded-full bg-black/[.045] p-1 text-sm font-semibold">
             <button className={`rounded-full px-4 py-2 transition ${view === 'create' ? 'bg-white shadow-sm' : 'text-black/55 hover:text-black'}`} onClick={() => setView('create')}>Create</button>
             <button className={`rounded-full px-4 py-2 transition ${view === 'images' ? 'bg-white shadow-sm' : 'text-black/55 hover:text-black'}`} onClick={() => setView('images')}>Images</button>
+            <button className={`rounded-full px-4 py-2 transition ${view === 'automation' ? 'bg-white shadow-sm' : 'text-black/55 hover:text-black'}`} onClick={() => setView('automation')}>Automation</button>
           </nav>
         </div>
       </header>
 
-      {view === 'images' ? <main className="mx-auto h-[calc(100vh-64px)] max-w-7xl"><ImageLibrary /></main> : (
+      {view === 'images' ? <main className="mx-auto h-[calc(100vh-64px)] max-w-7xl"><ImageLibrary /></main> : view === 'automation' ? (
+        <AutomationSettings onOpenSlideshow={onOpen} onRecipesChanged={refreshRecipes} />
+      ) : (
         <main className="mx-auto max-w-7xl px-6 pb-20 pt-12 lg:px-10">
           <section className="border-b border-black/10 pb-14">
             <div className="border-l-2 border-[#657052] pl-6">
               <label className="text-xs font-bold uppercase tracking-[.12em] text-black/50">Your topic</label>
               <textarea autoFocus className="mt-2 min-h-32 w-full resize-none border-0 bg-transparent p-0 text-xl font-semibold leading-8 outline-none placeholder:text-black/25" placeholder="What Moroni’s visits teach us about repetition" value={topic} onChange={(event) => setTopic(event.target.value)} />
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <label className="font-semibold text-black/55" htmlFor="home-recipe">Writing recipe</label>
+                <select id="home-recipe" className="max-w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-sm outline-none focus:border-[#657052]" value={recipeId} onChange={(event) => setRecipeId(event.target.value)}>
+                  <option value="">Built-in LDS family recipe</option>
+                  {recipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.name}</option>)}
+                </select>
+                <span className="text-xs text-black/40">7 vertical slides · publishes to Drive</span>
+              </div>
               <button className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#1f211d] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-50" disabled={!topic.trim() || Boolean(busy)} onClick={createSlideshow}>
                 {busy === 'create' ? <Loader2 className="animate-spin" size={17} /> : <Sparkles size={17} />}{busy === 'create' ? 'Creating slideshow...' : 'Create slideshow'}
               </button>

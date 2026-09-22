@@ -13,6 +13,7 @@ import {
   generateBatchTopics,
   generateSlideshowFromPrompt as coreGenerateSlideshowFromPrompt,
   normalizeRecipePayload,
+  recipePrompt as coreRecipePrompt,
   reviseSlideshowCopy,
   rowToRecipe as coreRowToRecipe,
   runRecipeAutomation
@@ -351,7 +352,13 @@ automationRouter.post('/topics', async (req, res) => {
 automationRouter.post('/quick-create', async (req, res) => {
   const prompt = String(req.body.topic || req.body.prompt || '').trim();
   if (!prompt) return res.status(400).json({ error: 'Add a topic first.' });
-  const { slideshow, llm_used: llmUsed } = await coreGenerateSlideshowFromPrompt(prompt, coreDefaultRecipe());
+  const recipeId = String(req.body.recipe_id || '').trim();
+  const recipe = recipeId
+    ? coreRowToRecipe(db.prepare('SELECT * FROM automation_recipes WHERE id = ?').get(recipeId))
+    : coreDefaultRecipe();
+  if (!recipe) return res.status(404).json({ error: 'Selected recipe not found' });
+  const generationPrompt = recipeId ? coreRecipePrompt(recipe, prompt) : prompt;
+  const { slideshow, llm_used: llmUsed } = await coreGenerateSlideshowFromPrompt(generationPrompt, recipe);
   const saved = insertSlideshow(slideshow, 'draft');
   const jobId = enqueueSlideshowRender(saved.id, 'Rendering and uploading to Google Drive');
   res.status(202).json({ slideshow: saved, job_id: jobId, llm_used: llmUsed });

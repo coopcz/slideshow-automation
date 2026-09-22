@@ -92,25 +92,16 @@ Restart the dev server after editing `.env`:
 npm run dev
 ```
 
-How the local automation is intended to work:
+### Create versus automation
 
-1. Upload a library of your own source images.
-2. Use **Generate from prompt** for one slideshow idea. The server describes your uploaded images with OpenAI when needed, then asks the model to write the slideshow and choose relevant local images for each slide.
-3. Adjust the generated slideshow in the composer.
-4. Click **Save as template** when the structure looks right. Templates preserve layout/style/slide count, but clear specific text and image choices.
-5. Use **Batch prompts, one per line** only when you want to create several separate slideshows at once. Each line becomes its own generated slideshow and render job.
-6. Download outputs from **My Exports**. Use **Render PNG ZIP** for individual image slides, or **Render MP4** for video.
+- **Create** with the “Built-in LDS family recipe” writes seven 9:16 slides using the app's built-in audience, voice, and format rules. It selects images from your uploaded library, renders the slides, and uploads them to the configured Google Drive folder.
+- The **Writing recipe** menu on Create can instead use one of your saved recipes. Its audience, goal, voice, image guidance, and `{{topic}}` prompt template shape the copy. Create still renders and uploads immediately, regardless of that recipe's scheduled-output setting.
+- **Automation** lets you edit saved recipes and create schedules. A schedule rotates through its topic list, using one topic at each selected day and time. The recipe's scheduled-output setting determines whether that run publishes to Drive or remains a draft. The app server must be running at the scheduled time; missed runs are not replayed.
+- Every generated slideshow uses the seven-slide, 9:16 TikTok format. You can review and revise it in the editor. AI revisions do not republish automatically; use the Publish button when ready.
 
 Image matching uses only your local image library. It does not source images from the internet.
 
-### Saved Automation Recipes
-
-Use **Automation Studio** when you want a reusable “set it up once, run it later” workflow:
-
-1. Fill in product, audience, goal, voice rules, slide count, output format, and prompt template.
-2. Click **Save recipe**.
-3. Later, choose the recipe, enter only the current topic, and click **Run saved automation**.
-4. The app generates a slideshow, matches uploaded local images, opens the result in the editor, and can queue the export automatically.
+### Saved recipe prompt variables
 
 Prompt templates support:
 
@@ -120,7 +111,7 @@ Prompt templates support:
 - `{{goal}}`
 - `{{voice}}`
 
-This is the local equivalent of an automation campaign. It does not publish anywhere.
+Drive publishing is optional and requires the Google Drive settings above.
 
 ## API
 

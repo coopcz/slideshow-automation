@@ -200,7 +200,7 @@ export function buildSchemaPrompt(prompt, images = [], recipe = defaultRecipe())
 Audience: ${recipe.audience}
 Goal: ${recipe.goal}
 Voice: ${recipe.voice}
-Required slide count: ${recipe.slide_count}
+Required slide count: 7
 Caption spacing: ${recipe.word_spacing}. ${captionGuidance(recipe)}
 Progression: ${recipe.progression}
 Image instructions: ${recipe.image_instructions}
@@ -611,7 +611,7 @@ export function recipePrompt(recipe, topic = '') {
 }
 
 export async function generateSlideshowFromPrompt(prompt, recipeInput = defaultRecipe()) {
-  const recipe = normalizeRecipePayload(recipeInput);
+  const recipe = { ...normalizeRecipePayload(recipeInput), slide_count: 7, aspect_ratio: '9:16' };
   const images = await ensureImageDescriptions().catch((error) => {
     console.warn(`Image description indexing failed: ${error.message}`);
     return db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 120').all();
