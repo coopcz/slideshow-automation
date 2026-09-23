@@ -66,3 +66,36 @@ test('selectBestImage uses run topic context when the slide hint is generic', ()
 
   assert.equal(selected.id, 'sheep');
 });
+
+test('selectBestImage reads generated headline and body before text items exist', () => {
+  const selected = selectBestImage({
+    image_hint: 'quiet moment',
+    headline: 'A child asks about the lost sheep',
+    body: 'Jesus notices the one who is missing.',
+    text_items: []
+  }, images);
+
+  assert.equal(selected.id, 'sheep');
+});
+
+test('selectBestImage favors a fresh relevant image over a recently overused one', () => {
+  const alternatives = [
+    { id: 'old', original_name: 'scripture-journal-a.jpg', description: 'An open scripture journal on a table.' },
+    { id: 'fresh', original_name: 'scripture-journal-b.jpg', description: 'An open scripture journal on a table.' }
+  ];
+  const selected = selectBestImage({ image_hint: 'open scripture journal on a table' }, alternatives, new Set(), {
+    recentUsage: new Map([['old', 3]]),
+    preferredId: 'old'
+  });
+
+  assert.equal(selected.id, 'fresh');
+});
+
+test('selectBestImage keeps a uniquely relevant image despite recent use', () => {
+  const selected = selectBestImage({
+    image_hint: 'one sheep on a hillside',
+    headline: 'The lost sheep matters to the Savior'
+  }, images, new Set(), { recentUsage: new Map([['sheep', 4]]) });
+
+  assert.equal(selected.id, 'sheep');
+});

@@ -44,7 +44,7 @@ export async function describeImage(image) {
       content: [
         {
           type: 'text',
-          text: 'Describe this image for matching it to scripture study slideshow slides. Mention visible people, objects, setting, actions, era or story clues, mood, colors, and any scripture, religious, family, study, or app relevance. Be concrete and visual. One sentence only.'
+          text: 'Describe only what is visibly in this image: people, objects, setting, action, colors, lighting, composition, and any clearly identifiable scripture or historical details. Do not invent a story, identify unrecognizable people, or add generic spiritual themes or suggestions for use. One concrete sentence.'
         },
         { type: 'image_url', image_url: { url: await imageDataUrl(image) } }
       ]
@@ -71,7 +71,7 @@ async function describeImageWithRetry(image) {
   throw lastError;
 }
 
-export async function ensureImageDescriptions(limit = 120) {
+export async function ensureImageDescriptions(limit = 500) {
   const { db } = await import('../db/index.js');
   const images = db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT ?').all(limit);
   const next = [];
@@ -99,7 +99,9 @@ export async function ensureImageDescriptions(limit = 120) {
 const STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'by', 'for', 'from', 'has', 'have',
   'how', 'in', 'is', 'it', 'its', 'of', 'on', 'or', 'that', 'the', 'their', 'this',
-  'to', 'with', 'you', 'your'
+  'to', 'with', 'you', 'your', 'image', 'depict', 'show', 'feature', 'scene', 'mood',
+  'theme', 'relevant', 'suitable', 'inspiration', 'inspirational', 'peaceful',
+  'gospel', 'lesson', 'spiritual', 'religious'
 ]);
 
 const RELATED_TERMS = {
@@ -156,43 +158,60 @@ function imageTermFrequencies(images) {
   return frequencies;
 }
 
-export function selectBestImage(slide, images, usedIds = new Set()) {
-  if (!images.length) return null;
+function stableTieBreak(slide, image) {
+  const seed = `${slide.image_hint || ''}|${slide.headline || ''}|${image.id}`;
+  let hash = 0;
+  for (const character of seed) hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  return (hash >>> 0) / 0xffffffff;
+}
+
+export function rankImagesForSlide(slide, images, { usedIds = new Set(), recentUsage = new Map(), preferredId = null } = {}) {
+  if (!images.length) return [];
   const pool = images.some((image) => !usedIds.has(image.id))
     ? images.filter((image) => !usedIds.has(image.id))
     : images;
   const frequencies = imageTermFrequencies(images);
+  const copy = [slide.headline, slide.body, ...(slide.text_items || []).map((item) => item.text)].filter(Boolean).join(' ');
   const slideWeights = weightedTerms([
     [slide.image_hint, 4],
-    [(slide.text_items || []).map((item) => item.text).join(' '), 2],
-    [slide.topic_context, 1.5],
+    [copy, 3],
+    [slide.topic_context, 1],
     [slide.requested_image_context, 0.25]
   ]);
-  let best = null;
-  let bestScore = Number.NEGATIVE_INFINITY;
-  for (const image of pool) {
+  const scored = pool.map((image) => {
     const imageText = `${image.original_name} ${image.description}`;
     const imageTerms = new Set(terms(imageText));
-    let score = usedIds.has(image.id) ? -2 : 0;
+    let relevance = 0;
     for (const [term, weight] of slideWeights) {
       if (imageTerms.has(term)) {
         const frequency = frequencies.get(term) || 1;
-        score += weight * (1 + Math.log(images.length / frequency));
+        relevance += weight * (1 + Math.log(images.length / frequency));
       }
     }
 
-    const lowerImageText = imageText.toLowerCase();
     const hintWords = terms(slide.image_hint);
-    if (hintWords.length && hintWords.every((term) => lowerImageText.includes(term))) {
-      score += 4;
+    if (hintWords.length && hintWords.every((term) => imageTerms.has(term))) {
+      relevance += 4;
     }
-    if (/family|home|child|children|study|book|scripture|bible|church|temple|journal|prayer|christ|jesus|light/.test(lowerImageText)) {
-      score += 1;
-    }
-    if (score > bestScore) {
-      best = image;
-      bestScore = score;
-    }
-  }
-  return best || pool[0] || images[0];
+    return { image, relevance };
+  });
+  const bestRelevance = Math.max(...scored.map((item) => item.relevance));
+  const relevant = bestRelevance >= 6
+    ? scored.filter((item) => item.relevance >= bestRelevance - 8)
+    : scored;
+  return relevant
+    .map(({ image, relevance }) => ({
+      image,
+      relevance,
+      score: relevance
+        + (image.id === preferredId ? 3 : 0)
+        - Math.min(16, Number(recentUsage.get(image.id) || 0) * 5)
+        - (usedIds.has(image.id) ? 10 : 0)
+        + stableTieBreak(slide, image) * 0.35
+    }))
+    .sort((a, b) => b.score - a.score || a.image.id.localeCompare(b.image.id));
+}
+
+export function selectBestImage(slide, images, usedIds = new Set(), options = {}) {
+  return rankImagesForSlide(slide, images, { ...options, usedIds })[0]?.image || null;
 }

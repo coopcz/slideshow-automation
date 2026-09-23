@@ -5,7 +5,7 @@ import { db, nowIso } from '../db/index.js';
 import { config } from '../config.js';
 import { createSlide, createTextItem, defaultSettings, normalizeSlideshow } from '../model/defaults.js';
 import { enqueueRender } from '../queue/renderQueue.js';
-import { ensureImageDescriptions, selectBestImage } from '../ai/imageLibrary.js';
+import { ensureImageDescriptions, rankImagesForSlide, selectBestImage } from '../ai/imageLibrary.js';
 
 export function defaultRecipe() {
   return {
@@ -486,16 +486,41 @@ function imageLibraryPrompt(images) {
   }).join('\n');
 }
 
-function slideMatchingPrompt(slides) {
+export function slideMatchingPrompt(slides) {
   return slides.map((slide, index) => {
-    const text = (slide.text_items || []).map((item) => item.text).join(' ').replace(/\s+/g, ' ').trim();
+    const text = [slide.headline, slide.body, ...(slide.text_items || []).map((item) => item.text)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
     return `Slide ${slide.order ?? index}: hint="${slide.image_hint || ''}" text="${text}"`;
   }).join('\n');
 }
 
-async function matchImagesWithLlm(slides, images, topicContext = '', recipe = defaultRecipe()) {
+export function recentImageUsage(slideshows, images) {
+  const idByUrl = new Map(images.map((image) => [image.url, image.id]));
+  const usage = new Map();
+  slideshows.forEach((slideshow, age) => {
+    let slides;
+    try {
+      slides = Array.isArray(slideshow.slides) ? slideshow.slides : JSON.parse(slideshow.slides);
+    } catch {
+      return;
+    }
+    const weight = Math.exp(-age / 6);
+    for (const slide of slides) {
+      const id = idByUrl.get(slide.image_url);
+      if (id) usage.set(id, (usage.get(id) || 0) + weight);
+    }
+  });
+  return usage;
+}
+
+async function matchImagesWithLlm(slides, images, topicContext = '', recipe = defaultRecipe(), recentUsage = new Map()) {
   if (!config.llm.openaiKey || !images.length || !slides.length) return new Map();
   const client = new OpenAI({ apiKey: config.llm.openaiKey });
+  const candidates = new Map();
+  for (const slide of slides) {
+    for (const candidate of rankImagesForSlide({ ...slide, topic_context: topicContext }, images, { recentUsage }).slice(0, 14)) {
+      candidates.set(candidate.image.id, candidate.image);
+    }
+  }
   const prompt = `Choose the best local image for each generated slideshow slide.
 
 Topic/request:
@@ -507,6 +532,7 @@ ${recipe.image_instructions}
 Rules:
 - Match visible image content to the slide text, image hint, and recipe instructions.
 - Prefer concrete story, setting, object, action, mood, and product relevance over generic imagery.
+- Prefer a less-used image when two choices fit equally well. The app applies a final relevance and recent-use check.
 - Use a different image_id for each slide unless there are fewer images than slides.
 - Only choose image_id values from the local image library.
 
@@ -514,7 +540,7 @@ Slides:
 ${slideMatchingPrompt(slides)}
 
 Local image library:
-${imageLibraryPrompt(images)}`;
+${imageLibraryPrompt([...candidates.values()])}`;
 
   const response = await client.chat.completions.create({
     model: config.llm.openaiModel,
@@ -525,22 +551,22 @@ ${imageLibraryPrompt(images)}`;
   return new Map((parsed.matches || []).map((match) => [Number(match.order), match.image_id]));
 }
 
-function applyImages(slides, images, topicContext = '', recipe = defaultRecipe(), preferredImageIds = new Map()) {
+function applyImages(slides, images, topicContext = '', preferredImageIds = new Map(), recentUsage = new Map()) {
   const byId = new Map(images.map((image) => [image.id, image]));
   const used = new Set();
   return slides.map((slide, index) => {
-    const preferred = byId.get(preferredImageIds.get(Number(slide.order ?? index)));
     const requested = byId.get(slide.image_id);
     const scoringSlide = {
       ...slide,
-      topic_context: `${topicContext} ${recipe.image_instructions} ${recipe.progression}`,
+      topic_context: topicContext,
       requested_image_context: requested
         ? `${requested.original_name} ${requested.description || ''}`
         : ''
     };
-    const chosen = preferred && !used.has(preferred.id)
-      ? preferred
-      : selectBestImage(scoringSlide, images, used);
+    const chosen = selectBestImage(scoringSlide, images, used, {
+      recentUsage,
+      preferredId: preferredImageIds.get(Number(slide.order ?? index))
+    });
     if (chosen) used.add(chosen.id);
     return {
       ...slide,
@@ -614,15 +640,17 @@ export async function generateSlideshowFromPrompt(prompt, recipeInput = defaultR
   const recipe = { ...normalizeRecipePayload(recipeInput), slide_count: 7, aspect_ratio: '9:16' };
   const images = await ensureImageDescriptions().catch((error) => {
     console.warn(`Image description indexing failed: ${error.message}`);
-    return db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 120').all();
+    return db.prepare('SELECT * FROM images ORDER BY created_at DESC LIMIT 500').all();
   });
+  const recentSlideshows = db.prepare('SELECT slides FROM slideshows ORDER BY created_at DESC LIMIT 24').all();
+  const usage = recentImageUsage(recentSlideshows, images);
   const generated = await callLlm(prompt, images, recipe).catch(() => null);
   if (!generated) {
     const fallback = fallbackGenerated(prompt, recipe);
-    fallback.slides = applyImages(fallback.slides, images, prompt, recipe);
+    fallback.slides = applyImages(fallback.slides, images, prompt, new Map(), usage);
     return { slideshow: fallback, llm_used: false };
   }
-  const preferredImageIds = await matchImagesWithLlm(generated.slides, images, prompt, recipe).catch((error) => {
+  const preferredImageIds = await matchImagesWithLlm(generated.slides, images, prompt, recipe, usage).catch((error) => {
     console.warn(`LLM image matching failed, falling back to local scorer: ${error.message}`);
     return new Map();
   });
@@ -636,7 +664,7 @@ export async function generateSlideshowFromPrompt(prompt, recipeInput = defaultR
       is_bg_overlay_on: true,
       background_opacity: 12
     },
-    slides: applyImages(generated.slides, images, prompt, recipe, preferredImageIds).map((slide, index) => createSlide({
+    slides: applyImages(generated.slides, images, prompt, preferredImageIds, usage).map((slide, index) => createSlide({
       order: index,
       image_url: slide.image_url,
       image_urls: slide.image_urls,

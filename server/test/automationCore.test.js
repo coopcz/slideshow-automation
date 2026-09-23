@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applySlideshowRevision, buildSchemaPrompt, defaultRecipe, generateBatchTopics, normalizeRecipePayload, recipePrompt } from '../src/automation/core.js';
+import { applySlideshowRevision, buildSchemaPrompt, defaultRecipe, generateBatchTopics, normalizeRecipePayload, recentImageUsage, recipePrompt, slideMatchingPrompt } from '../src/automation/core.js';
 import { config } from '../src/config.js';
 import { cronExpressionForTime } from '../src/scheduler.js';
 
@@ -45,6 +45,21 @@ test('saved recipe inserts the selected topic into its prompt', () => {
   const prompt = recipePrompt({ ...defaultRecipe(), prompt_template: 'Teach {{topic}} to {{audience}} for {{product_name}}.' }, 'Moroni’s visits');
   assert.match(prompt, /Teach Moroni’s visits to LDS parents and older Church members/);
   assert.match(prompt, /for Latter Study/);
+});
+
+test('recentImageUsage weights recent slideshow images more strongly', () => {
+  const images = [{ id: 'recent', url: '/uploads/recent.png' }, { id: 'older', url: '/uploads/older.png' }];
+  const usage = recentImageUsage([
+    { slides: JSON.stringify([{ image_url: '/uploads/recent.png' }]) },
+    { slides: JSON.stringify([{ image_url: '/uploads/older.png' }]) }
+  ], images);
+
+  assert.ok(usage.get('recent') > usage.get('older'));
+});
+
+test('image matching prompt includes generated headline and body', () => {
+  const prompt = slideMatchingPrompt([{ order: 0, image_hint: 'open scripture', headline: 'A clear thought', body: 'A short explanation', text_items: [] }]);
+  assert.match(prompt, /A clear thought A short explanation/);
 });
 
 test('applySlideshowRevision changes copy while preserving slide design and images', () => {
